@@ -594,21 +594,37 @@ async function fetchAllPrices() {
 
 // ── Calc ───────────────────────────────────────────────────
 function calc(sid, price) {
-  var list = txns[sid] || [], bs=0, bc=0, ss=0, sp=0, div=0;
-  list.forEach(function(t) {
-    if (t.type==='買入'||t.type==='再投入') { bs+=+(t.shares||0); bc+=+t.total; }
-    else if (t.type==='賣出') { ss+=+(t.shares||0); sp+=+t.total; }
-    else if (t.type==='股息') { div+=+t.total; }
+  var list = txns[sid] || [];
+  // Replay chronologically so avg cost and realized P&L are accurate per-sell
+  var sorted = list.slice().sort(function(a,b){
+    var da=normDate(a.date), db=normDate(b.date);
+    return da>db?1:da<db?-1:0;
+  });
+  var bs=0, bc=0, div=0, real=0;
+  sorted.forEach(function(t) {
+    if (t.type==='買入'||t.type==='再投入') {
+      bs+=+(t.shares||0); bc+=+t.total;
+    } else if (t.type==='賣出') {
+      var avgNow = bs>0 ? bc/bs : 0;
+      // Use custom sellCost if set, otherwise use avg at this point
+      var costPerShare = (t.sellCost!=null&&+t.sellCost>0) ? +t.sellCost : avgNow;
+      var sh = +(t.shares||0);
+      // Realized P&L = proceeds - cost
+      real += +t.total - sh*costPerShare;
+      // Reduce remaining cost basis using actual avg (not custom sellCost)
+      bs -= sh; bc -= sh*avgNow;
+      if(bs<0) bs=0; if(bc<0) bc=0;
+    } else if (t.type==='股息') {
+      div+=+t.total;
+    }
   });
   var avg = bs>0 ? bc/bs : 0;
-  var cur = bs-ss;
-  var cost = cur*avg;
-  var real = sp - ss*avg;
-  var mv = cur*price;
+  var cost = bs*avg;
+  var mv = bs*price;
   var unreal = mv-cost;
   var unrPct = cost>0 ? unreal/cost : 0;
   var retPct = cost>0 ? (real+div+(price>0?unreal:0))/cost : 0;
-  return { cur, avg, cost, div, real, unreal, unrPct, retPct, mv };
+  return { cur:bs, avg:avg, cost:cost, div:div, real:real, unreal:unreal, unrPct:unrPct, retPct:retPct, mv:mv };
 }
 
 // ── Format ─────────────────────────────────────────────────
