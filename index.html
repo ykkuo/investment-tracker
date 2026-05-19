@@ -288,6 +288,11 @@ textarea.input{height:72px;resize:none}
       <div class="import-desc">匯出各標的損益摘要，包含持股數、平均成本、損益、股息。</div>
       <button class="btn-primary c-blue" id="btn-export-summary" style="margin-top:4px">下載損益摘要 CSV</button>
     </div>
+    <div class="import-card" style="margin-top:0;border:1.5px solid var(--red)">
+      <div class="import-title" style="color:var(--red)">⚠️ 清除全部資料</div>
+      <div class="import-desc">刪除 Firebase 上所有標的及交易紀錄，無法復原。建議先匯出備份再執行。</div>
+      <button class="btn-primary c-red" id="btn-clear-all" style="margin-top:4px">清除全部資料</button>
+    </div>
   </div>
 </div>
 
@@ -335,6 +340,11 @@ textarea.input{height:72px;resize:none}
       <div class="field" id="ef-tax-wrap">
         <label class="field-label">交易稅（元）</label>
         <input class="input" id="ef-tax" type="number" inputmode="decimal" placeholder="0">
+      </div>
+      <div class="field" id="ef-sellcost-wrap" style="display:none">
+        <label class="field-label">賣出成本（每股）</label>
+        <input class="input" id="ef-sellcost" type="number" inputmode="decimal" placeholder="預設使用當時平均成本">
+        <div class="field-hint">留空則自動使用當時平均成本；可手動填入指定成本</div>
       </div>
       <div class="field">
         <label class="field-label">總金額（元）</label>
@@ -412,6 +422,11 @@ textarea.input{height:72px;resize:none}
         <input class="input" id="f-tax" type="number" inputmode="decimal" placeholder="自動計算">
         <div class="field-hint">賣出：成交金額 × 0.3%</div>
       </div>
+      <div class="field" id="f-sellcost-wrap" style="display:none">
+        <label class="field-label">賣出成本（每股）</label>
+        <input class="input" id="f-sellcost" type="number" inputmode="decimal" placeholder="預設使用當時平均成本">
+        <div class="field-hint">留空則自動使用當時平均成本；可手動填入指定成本</div>
+      </div>
     </div>
     <div id="form-div-area" style="display:none">
       <div class="field">
@@ -460,6 +475,7 @@ var curChartMarket = 'all';
 var chartInstances = [];
 var importRows = [];
 var showFilter = 'holding'; // 'holding' | 'all'
+var showMarket = 'all'; // 'all' | '台股' | '美股' | '基金'
 var curEditTxId = null;
 
 // ── Firebase helpers ───────────────────────────────────────
@@ -639,8 +655,14 @@ function renderPortfolio() {
 
     // Filter bar
     html += '<div class="filter-bar">' +
-      '<button class="filter-btn'+(showFilter==='holding'?' active':'')+'" data-filter="holding">持有中</button>' +
-      '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all">全部</button>' +
+      '<button class="filter-btn'+(showFilter==='holding'?' active':'')+'" data-filter="holding" data-type="holding">持有中</button>' +
+      '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all" data-type="holding">全部</button>' +
+    '</div>' +
+    '<div class="filter-bar" style="padding-top:4px">' +
+      '<button class="filter-btn'+(showMarket==='all'?' active':'')+'" data-market="all">全部市場</button>' +
+      '<button class="filter-btn'+(showMarket==='台股'?' active':'')+'" data-market="台股">台股</button>' +
+      '<button class="filter-btn'+(showMarket==='美股'?' active':'')+'" data-market="美股">美股</button>' +
+      '<button class="filter-btn'+(showMarket==='基金'?' active':'')+'" data-market="基金">基金</button>' +
     '</div>';
   }
 
@@ -650,8 +672,9 @@ function renderPortfolio() {
     stocks.forEach(function(st){
       var s=sums[st.id], pr=getPrice(st.id), hp=pr>0;
       var cache=priceCache[st.id];
-      // Filter: hide zero-share stocks if showFilter==='holding'
+      // Filter: holding/all and market
       if (showFilter==='holding' && s.cur<=0) return;
+      if (showMarket!=='all' && st.market!==showMarket) return;
       html += '<div class="stock-card" data-sid="'+st.id+'">' +
         '<div class="stock-card-top">' +
           '<div>' +
@@ -685,8 +708,11 @@ function renderPortfolio() {
   }
   document.getElementById('tab-portfolio').innerHTML = html;
 
-  document.querySelectorAll('.filter-btn').forEach(function(btn){
+  document.querySelectorAll('[data-filter]').forEach(function(btn){
     btn.addEventListener('click', function(){ showFilter=this.dataset.filter; renderPortfolio(); });
+  });
+  document.querySelectorAll('[data-market]').forEach(function(btn){
+    btn.addEventListener('click', function(){ showMarket=this.dataset.market; renderPortfolio(); });
   });
   document.querySelectorAll('[data-goto]').forEach(function(btn){
     btn.addEventListener('click', function(){ showDetail(this.dataset.goto); });
@@ -731,7 +757,8 @@ function renderDetail() {
     if(t.type==='買入'||t.type==='再投入'){ _bs+=+(t.shares||0); _bc+=+(t.total||0); }
     else if(t.type==='賣出'){
       var _avg=_bs>0?_bc/_bs:0;
-      avgAtSell[String(t.id)]=_avg;
+      // Use manually set sellCost if available, otherwise use computed avg
+      avgAtSell[String(t.id)] = (t.sellCost!=null && t.sellCost>0) ? +t.sellCost : _avg;
       _bs-=+(t.shares||0); _bc-=+(t.shares||0)*_avg;
       if(_bs<0)_bs=0; if(_bc<0)_bc=0;
     }
@@ -771,7 +798,8 @@ function renderDetail() {
           '<div><div class="tx-detail-label">股數</div><div class="tx-detail-value">'+fn(tx.shares)+'</div></div>' +
           '<div><div class="tx-detail-label">單價</div><div class="tx-detail-value">$'+fn(tx.price,2)+'</div></div>' +
           '<div><div class="tx-detail-label">'+(tx.type==='賣出'?'實收金額':'總成本')+'</div><div class="tx-detail-value">'+fc(tx.total)+'</div></div>' +
-        '</div>';
+        '</div>' +
+        (tx.type==='賣出'&&tx.sellCost?'<div class="tx-fees">使用成本：$'+fn(tx.sellCost,2)+'/股</div>':'');
       }
       if (sellPnL) {
         html+='<div class="tx-pnl '+pbg(sellPnL.pnl)+'">' +
@@ -1008,7 +1036,7 @@ async function deleteStock(sid) {
 function openAddTx() {
   curType='買入';
   document.getElementById('f-date').value=today();
-  ['f-shares','f-price','f-fee','f-tax','f-amount','f-note'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['f-shares','f-price','f-fee','f-tax','f-sellcost','f-amount','f-note'].forEach(function(id){ document.getElementById(id).value=''; });
   renderSeg('seg-type',['買入','賣出','股息','再投入'],curType,'type');
   updateTxForm();
   document.getElementById('m-tx').classList.add('open');
@@ -1016,13 +1044,22 @@ function openAddTx() {
 
 function updateTxForm() {
   var isDiv=curType==='股息';
+  var isSell=curType==='賣出';
   document.getElementById('form-shares-area').style.display=isDiv?'none':'';
   document.getElementById('form-div-area').style.display=isDiv?'':'none';
-  document.getElementById('f-tax-wrap').style.display=curType==='賣出'?'':'none';
+  document.getElementById('f-tax-wrap').style.display=isSell?'':'none';
+  document.getElementById('f-sellcost-wrap').style.display=isSell?'':'none';
   var cls={買入:'c-green',賣出:'c-red',股息:'c-green',再投入:'c-purple'}[curType];
   var btn=document.getElementById('btn-submit-tx');
   btn.className='btn-primary '+cls;
   btn.textContent='新增'+curType;
+  // Auto-fill avg cost when switching to sell
+  if (isSell && curStockId) {
+    var s=calc(curStockId, getPrice(curStockId));
+    if (s.avg>0 && !document.getElementById('f-sellcost').value) {
+      document.getElementById('f-sellcost').value=Math.round(s.avg*100)/100;
+    }
+  }
 }
 
 function autoFee() {
@@ -1040,7 +1077,7 @@ async function submitAddTx() {
   if (!date) { alert('請填寫日期'); return; }
   var fee=parseFloat(document.getElementById('f-fee').value)||0;
   var tax=parseFloat(document.getElementById('f-tax').value)||0;
-  var total,shares=null,price=null;
+  var total,shares=null,price=null,sellCost=null;
   if (curType==='股息') {
     total=parseFloat(document.getElementById('f-amount').value)||0;
     if (!total) { alert('請填寫股息金額'); return; }
@@ -1048,9 +1085,22 @@ async function submitAddTx() {
     shares=parseFloat(document.getElementById('f-shares').value)||0;
     price=parseFloat(document.getElementById('f-price').value)||0;
     if (!shares||!price) { alert('請填寫股數和單價'); return; }
-    total=curType==='賣出'?shares*price-fee-tax:shares*price+fee+tax;
+    if (curType==='賣出') {
+      total=shares*price-fee-tax;
+      var scRaw=parseFloat(document.getElementById('f-sellcost').value);
+      if (scRaw>0) { sellCost=scRaw; }
+      else {
+        // Auto compute avg at this point in time
+        var s=calc(curStockId, 0);
+        sellCost=s.avg>0?Math.round(s.avg*100)/100:null;
+      }
+    } else {
+      total=shares*price+fee+tax;
+    }
   }
-  await addTxDb(curStockId,{type:curType,date,shares,price,fee,tax,total,note:document.getElementById('f-note').value.trim()});
+  var txData={type:curType,date,shares,price,fee,tax,total,note:document.getElementById('f-note').value.trim()};
+  if (sellCost!==null) txData.sellCost=sellCost;
+  await addTxDb(curStockId,txData);
   document.getElementById('m-tx').classList.remove('open');
   renderDetail();
 }
@@ -1085,6 +1135,17 @@ function openEditTx(sid, txid) {
   document.getElementById('ef-total').value = tx.total != null ? tx.total : '';
   document.getElementById('ef-amount').value = tx.type==='股息' ? tx.total : '';
   document.getElementById('ef-note').value = tx.note || '';
+  // Fill sell cost: use stored sellCost, or fall back to avg at sell time
+  if (tx.type==='賣出') {
+    if (tx.sellCost != null) {
+      document.getElementById('ef-sellcost').value = tx.sellCost;
+    } else {
+      var _s = calc(curStockId, 0);
+      document.getElementById('ef-sellcost').value = _s.avg>0 ? Math.round(_s.avg*100)/100 : '';
+    }
+  } else {
+    document.getElementById('ef-sellcost').value = '';
+  }
   renderSeg('seg-edit-type',['買入','賣出','股息','再投入'],curEditType,'edit-type');
   updateEditTxForm();
 
@@ -1103,9 +1164,11 @@ function openEditTx(sid, txid) {
 
 function updateEditTxForm() {
   var isDiv = curEditType==='股息';
+  var isSell = curEditType==='賣出';
   document.getElementById('eform-shares-area').style.display = isDiv?'none':'';
   document.getElementById('eform-div-area').style.display = isDiv?'':'none';
-  document.getElementById('ef-tax-wrap').style.display = curEditType==='賣出'?'':'none';
+  document.getElementById('ef-tax-wrap').style.display = isSell?'':'none';
+  document.getElementById('ef-sellcost-wrap').style.display = isSell?'':'none';
   var cls={買入:'c-green',賣出:'c-red',股息:'c-green',再投入:'c-purple'}[curEditType];
   document.getElementById('btn-submit-edit-tx').className='btn-primary '+cls;
 }
@@ -1133,7 +1196,12 @@ async function submitEditTx() {
     }
   }
 
-  await updateTxDb(sid, txid, {type:curEditType, date, shares, price, fee, tax, total, note:document.getElementById('ef-note').value.trim()});
+  var editData={type:curEditType, date:date, shares:shares, price:price, fee:fee, tax:tax, total:total, note:document.getElementById('ef-note').value.trim()};
+  if (curEditType==='賣出') {
+    var scVal=parseFloat(document.getElementById('ef-sellcost').value);
+    editData.sellCost = scVal>0 ? scVal : null;
+  }
+  await updateTxDb(sid, txid, editData);
   document.getElementById('m-edit-tx').classList.remove('open');
   renderDetail();
 }
@@ -1219,6 +1287,21 @@ function exportSummaryCSV() {
   downloadCSV('投資損益摘要_'+today+'.csv', rows);
 }
 
+// ── Clear all data ─────────────────────────────────────────
+async function clearAllData() {
+  if (!confirm('確定要清除所有資料嗎？此動作無法復原！')) return;
+  if (!confirm('再次確認：所有標的和交易紀錄都會被刪除，確定嗎？')) return;
+  var btn = document.getElementById('btn-clear-all');
+  btn.textContent = '刪除中…'; btn.disabled = true;
+  for (var i=0; i<stocks.length; i++) {
+    await deleteStockDb(stocks[i].id);
+  }
+  stocks=[]; txns={}; priceCache={};
+  btn.textContent = '清除全部資料'; btn.disabled = false;
+  renderPortfolio();
+  alert('已清除所有資料！');
+}
+
 // ── Tab switching ──────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
@@ -1299,6 +1382,7 @@ document.getElementById('m-stock').addEventListener('click',function(e){ if(e.ta
 document.getElementById('m-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('m-edit-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('btn-export-csv').addEventListener('click', exportTxCSV);
+document.getElementById('btn-clear-all').addEventListener('click', clearAllData);
 document.getElementById('btn-export-summary').addEventListener('click', exportSummaryCSV);
 document.getElementById('btn-submit-edit-tx').addEventListener('click', submitEditTx);
 document.getElementById('btn-cancel-edit-tx').addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
