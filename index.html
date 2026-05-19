@@ -212,6 +212,7 @@ textarea.input{height:72px;resize:none}
       <button class="tab-btn active" data-tab="portfolio">📊 組合</button>
       <button class="tab-btn" data-tab="charts">📈 分析</button>
       <button class="tab-btn" data-tab="import">📥 匯入</button>
+      <button class="tab-btn" data-tab="export">📤 匯出</button>
     </div>
   </div>
 
@@ -256,6 +257,20 @@ textarea.input{height:72px;resize:none}
       <input type="file" id="file-input" accept=".csv">
     </div>
     <div id="import-preview"></div>
+  </div>
+
+  <!-- Export Tab -->
+  <div class="tab-content" id="tab-export">
+    <div class="import-card">
+      <div class="import-title">📤 匯出資料</div>
+      <div class="import-desc">將所有交易紀錄匯出為 CSV，可用 Excel 或 Google Sheets 開啟。</div>
+      <button class="btn-primary c-blue" id="btn-export-csv" style="margin-top:4px">下載交易紀錄 CSV</button>
+    </div>
+    <div class="import-card" style="margin-top:0">
+      <div class="import-title">📊 匯出摘要</div>
+      <div class="import-desc">匯出各標的損益摘要，包含持股數、平均成本、損益、股息。</div>
+      <button class="btn-primary c-blue" id="btn-export-summary" style="margin-top:4px">下載損益摘要 CSV</button>
+    </div>
   </div>
 </div>
 
@@ -350,12 +365,12 @@ textarea.input{height:72px;resize:none}
 // ⚙️  FIREBASE 設定 - 請替換成你的設定值
 // ══════════════════════════════════════════════════════════
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBXozuwFdAzVSCT558H7qqkb77pbc8vGqc",
-  authDomain: "inv-tkr.firebaseapp.com",
-  projectId: "inv-tkr",
-  storageBucket: "inv-tkr.firebasestorage.app",
-  messagingSenderId: "503773958810",
-  appId: "1:503773958810:web:0940333a337d8f7ed94523"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 // ══════════════════════════════════════════════════════════
 
@@ -563,7 +578,7 @@ function renderPortfolio() {
         '</div>' +
         '<div class="divider"></div>' +
         '<div class="price-row">' +
-          '<div class="price-label">現值</div>' +
+          '<div class="price-label">現價</div>' +
           '<div>' +
             '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?'$'+fn(pr,2):'抓取中…')+'</div>' +
             '<div class="price-time">'+(cache?fmtAt(cache.at):'')+'</div>' +
@@ -928,21 +943,43 @@ async function onDeleteTx(sid, txid) {
   renderDetail();
 }
 
+function toDateInput(val) {
+  if (!val) return '';
+  val = String(val).trim();
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  // YYYY/MM/DD or YYYY/M/D
+  var m = val.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m) return m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+  return val;
+}
+
 function openEditTx(sid, txid) {
   var tx = (txns[sid]||[]).find(function(t){ return t.id===txid; });
   if (!tx) return;
   curEditTxId = txid;
   curEditType = tx.type;
-  document.getElementById('ef-date').value = tx.date || '';
-  document.getElementById('ef-shares').value = tx.shares || '';
-  document.getElementById('ef-price').value = tx.price || '';
-  document.getElementById('ef-fee').value = tx.fee || '';
-  document.getElementById('ef-tax').value = tx.tax || '';
-  document.getElementById('ef-total').value = tx.total || '';
+  document.getElementById('ef-date').value = toDateInput(tx.date);
+  document.getElementById('ef-shares').value = tx.shares != null ? tx.shares : '';
+  document.getElementById('ef-price').value = tx.price != null ? tx.price : '';
+  document.getElementById('ef-fee').value = tx.fee != null ? tx.fee : '';
+  document.getElementById('ef-tax').value = tx.tax != null ? tx.tax : '';
+  document.getElementById('ef-total').value = tx.total != null ? tx.total : '';
   document.getElementById('ef-amount').value = tx.type==='股息' ? tx.total : '';
   document.getElementById('ef-note').value = tx.note || '';
   renderSeg('seg-edit-type',['買入','賣出','股息','再投入'],curEditType,'edit-type');
   updateEditTxForm();
+
+  // Re-bind buttons every time to avoid stale references
+  var submitBtn = document.getElementById('btn-submit-edit-tx');
+  var cancelBtn = document.getElementById('btn-cancel-edit-tx');
+  var newSubmit = submitBtn.cloneNode(true);
+  var newCancel = cancelBtn.cloneNode(true);
+  submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
+  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+  newSubmit.addEventListener('click', submitEditTx);
+  newCancel.addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
+
   document.getElementById('m-edit-tx').classList.add('open');
 }
 
@@ -1007,6 +1044,65 @@ function renderSeg(containerId,options,selected,key) {
   });
 }
 
+// ── Export ─────────────────────────────────────────────────
+function downloadCSV(filename, rows) {
+  var csv = rows.map(function(r){
+    return r.map(function(cell){
+      var s = String(cell==null?'':cell);
+      if (s.includes(',') || s.includes('"') || s.includes('
+')) {
+        return '"' + s.replace(/"/g,'""') + '"';
+      }
+      return s;
+    }).join(',');
+  }).join('
+');
+  var bom = '﻿';
+  var blob = new Blob([bom+csv], {type:'text/csv;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportTxCSV() {
+  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','總金額','備註']];
+  stocks.forEach(function(st){
+    var list = (txns[st.id]||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    list.forEach(function(tx){
+      rows.push([tx.date, st.code, st.name, st.market, tx.type,
+        tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0, tx.total, tx.note||'']);
+    });
+  });
+  var today = new Date().toISOString().slice(0,10);
+  downloadCSV('投資交易紀錄_'+today+'.csv', rows);
+}
+
+function exportSummaryCSV() {
+  var rows = [['標的代號','標的名稱','市場','持股數','平均成本','總持倉成本','現價','市值','未實現損益','未實現報酬率','已實現損益','累計股息','總報酬']];
+  stocks.forEach(function(st){
+    var pr = getPrice(st.id), s = calc(st.id, pr);
+    var tot = s.real + s.div + (pr>0 ? s.unreal : 0);
+    rows.push([
+      st.code, st.name, st.market,
+      Math.round(s.cur*100)/100,
+      Math.round(s.avg*100)/100,
+      Math.round(s.cost),
+      pr || '',
+      pr ? Math.round(s.mv) : '',
+      pr ? Math.round(s.unreal) : '',
+      pr ? (s.unrPct*100).toFixed(2)+'%' : '',
+      Math.round(s.real),
+      Math.round(s.div),
+      Math.round(tot)
+    ]);
+  });
+  var today = new Date().toISOString().slice(0,10);
+  downloadCSV('投資損益摘要_'+today+'.csv', rows);
+}
+
 // ── Tab switching ──────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
@@ -1016,6 +1112,7 @@ function switchTab(tab) {
   if (tab==='portfolio') { document.getElementById('header-action-btn').style.display=''; renderPortfolio(); }
   else if (tab==='charts') { document.getElementById('header-action-btn').style.display='none'; renderCharts(); }
   else if (tab==='import') { document.getElementById('header-action-btn').style.display='none'; }
+  else if (tab==='export') { document.getElementById('header-action-btn').style.display='none'; }
 }
 
 // ── Auth ───────────────────────────────────────────────────
@@ -1080,6 +1177,8 @@ document.getElementById('file-input').addEventListener('change',function(e){
 document.getElementById('m-stock').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('m-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('m-edit-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
+document.getElementById('btn-export-csv').addEventListener('click', exportTxCSV);
+document.getElementById('btn-export-summary').addEventListener('click', exportSummaryCSV);
 document.getElementById('btn-submit-edit-tx').addEventListener('click', submitEditTx);
 document.getElementById('btn-cancel-edit-tx').addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
 
