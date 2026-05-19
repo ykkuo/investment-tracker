@@ -289,6 +289,57 @@ textarea.input{height:72px;resize:none}
   <div class="detail-content" id="d-content"></div>
 </div>
 
+<!-- ══ EDIT TX MODAL ══ -->
+<div class="overlay" id="m-edit-tx">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">編輯交易</div>
+    <div class="field">
+      <label class="field-label">類型</label>
+      <div class="seg" id="seg-edit-type"></div>
+    </div>
+    <div class="field">
+      <label class="field-label">日期</label>
+      <input class="input" id="ef-date" type="date">
+    </div>
+    <div id="eform-shares-area">
+      <div class="field">
+        <label class="field-label">股數</label>
+        <input class="input" id="ef-shares" type="number" inputmode="decimal" placeholder="例：200">
+      </div>
+      <div class="field">
+        <label class="field-label">單價（元）</label>
+        <input class="input" id="ef-price" type="number" inputmode="decimal" placeholder="例：550">
+      </div>
+      <div class="field">
+        <label class="field-label">手續費（元）</label>
+        <input class="input" id="ef-fee" type="number" inputmode="decimal" placeholder="0">
+      </div>
+      <div class="field" id="ef-tax-wrap">
+        <label class="field-label">交易稅（元）</label>
+        <input class="input" id="ef-tax" type="number" inputmode="decimal" placeholder="0">
+      </div>
+      <div class="field">
+        <label class="field-label">總金額（元）</label>
+        <input class="input" id="ef-total" type="number" inputmode="decimal" placeholder="自動計算或手動輸入">
+        <div class="field-hint">留空則自動計算；或直接填入實際金額</div>
+      </div>
+    </div>
+    <div id="eform-div-area" style="display:none">
+      <div class="field">
+        <label class="field-label">股息金額（元）</label>
+        <input class="input" id="ef-amount" type="number" inputmode="decimal" placeholder="例：3000">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">備註（選填）</label>
+      <textarea class="input" id="ef-note" placeholder="備註…"></textarea>
+    </div>
+    <button class="btn-primary c-blue" id="btn-submit-edit-tx">儲存變更</button>
+    <button class="btn-ghost" id="btn-cancel-edit-tx">取消</button>
+  </div>
+</div>
+
 <!-- ══ ADD STOCK MODAL ══ -->
 <div class="overlay" id="m-stock">
   <div class="sheet">
@@ -519,6 +570,7 @@ function pbg(n){ return n>0?'bg-green':n<0?'bg-red':'bg-neutral'; }
 function ps(n){ return n>0?'+':''; }
 function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtAt(iso){ if(!iso)return''; var d=new Date(iso); return d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function normDate(d){ return d?String(d).replace(/\//g,'-'):'' ; }
 
 // ── Portfolio ──────────────────────────────────────────────
 function getPrice(sid){ return priceCache[sid]?.price || 0; }
@@ -634,7 +686,7 @@ function renderDetail() {
   var s=calc(sid,pr), tot=s.real+s.div+(pr>0?s.unreal:0);
 
   // Sort by date desc
-  var list=(txns[sid]||[]).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var list=(txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return db>da?1:db<da?-1:0; });
 
   var html='<div class="info-card">' +
     '<div class="info-row"><span class="info-label">現值</span><span class="info-value '+(pr>0?pcls(s.unreal):'muted')+'">'+(pr>0?'$'+fn(pr,2):'—')+'</span></div>' +
@@ -794,7 +846,7 @@ function parseCSV(text) {
     var cols=lines[i].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
     if (cols.length<8||!cols[0]) continue;
     rows.push({
-      date:cols[0], code:cols[1].toUpperCase(), name:cols[2],
+      date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
       market:cols[3]||'台股', type:cols[4],
       shares:cols[5]?parseFloat(cols[5]):null,
       price:cols[6]?parseFloat(cols[6]):null,
@@ -1189,56 +1241,5 @@ document.querySelectorAll('.market-tab').forEach(function(btn){
   });
 });
 </script>
-
-<!-- ══ EDIT TX MODAL ══ -->
-<div class="overlay" id="m-edit-tx">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">編輯交易</div>
-    <div class="field">
-      <label class="field-label">類型</label>
-      <div class="seg" id="seg-edit-type"></div>
-    </div>
-    <div class="field">
-      <label class="field-label">日期</label>
-      <input class="input" id="ef-date" type="date">
-    </div>
-    <div id="eform-shares-area">
-      <div class="field">
-        <label class="field-label">股數</label>
-        <input class="input" id="ef-shares" type="number" inputmode="decimal" placeholder="例：200">
-      </div>
-      <div class="field">
-        <label class="field-label">單價（元）</label>
-        <input class="input" id="ef-price" type="number" inputmode="decimal" placeholder="例：550">
-      </div>
-      <div class="field">
-        <label class="field-label">手續費（元）</label>
-        <input class="input" id="ef-fee" type="number" inputmode="decimal" placeholder="0">
-      </div>
-      <div class="field" id="ef-tax-wrap">
-        <label class="field-label">交易稅（元）</label>
-        <input class="input" id="ef-tax" type="number" inputmode="decimal" placeholder="0">
-      </div>
-      <div class="field">
-        <label class="field-label">總金額（元）</label>
-        <input class="input" id="ef-total" type="number" inputmode="decimal" placeholder="自動計算或手動輸入">
-        <div class="field-hint">留空則自動計算；或直接填入實際金額</div>
-      </div>
-    </div>
-    <div id="eform-div-area" style="display:none">
-      <div class="field">
-        <label class="field-label">股息金額（元）</label>
-        <input class="input" id="ef-amount" type="number" inputmode="decimal" placeholder="例：3000">
-      </div>
-    </div>
-    <div class="field">
-      <label class="field-label">備註（選填）</label>
-      <textarea class="input" id="ef-note" placeholder="備註…"></textarea>
-    </div>
-    <button class="btn-primary c-blue" id="btn-submit-edit-tx">儲存變更</button>
-    <button class="btn-ghost" id="btn-cancel-edit-tx">取消</button>
-  </div>
-</div>
 </body>
 </html>
