@@ -175,7 +175,24 @@ textarea.input{height:72px;resize:none}
 .user-avatar{width:28px;height:28px;border-radius:50%;object-fit:cover}
 .user-name{font-size:13px;color:var(--text2);flex:1}
 .btn-signout{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;font-family:inherit}
-</style>
+
+  /* ── Loading Progress Bar ── */
+  #loading-bar-wrap {
+    position:fixed; inset:0; background:var(--bg); z-index:300;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;
+  }
+  #loading-bar-wrap.hidden { display:none; }
+  .loading-logo { font-size:32px; font-weight:800; color:var(--text); }
+  .loading-sub { font-size:13px; color:var(--text2); min-height:18px; }
+  .progress-track {
+    width:220px; height:4px; background:var(--bg3); border-radius:9999px; overflow:hidden;
+  }
+  .progress-fill {
+    height:100%; background:var(--accent2); border-radius:9999px;
+    transition:width 0.3s ease; width:0%;
+  }
+
+  </style>
 </head>
 <body>
 
@@ -449,17 +466,35 @@ var curEditTxId = null;
 function stocksRef() { return db.collection('users').doc(uid).collection('stocks'); }
 function txnsRef(sid) { return db.collection('users').doc(uid).collection('stocks').doc(String(sid)).collection('txns'); }
 
+
+// ── Progress bar helpers ──────────────────────────────────
+function setProgress(pct, msg) {
+  var fill = document.getElementById('progress-fill');
+  var sub  = document.getElementById('loading-sub');
+  if (fill) fill.style.width = pct + '%';
+  if (sub && msg) sub.textContent = msg;
+}
+function hideLoadingBar() {
+  var wrap = document.getElementById('loading-bar-wrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+
 async function loadData() {
+  setProgress(10, '讀取股票清單…');
   const snap = await stocksRef().orderBy('createdAt').get();
   stocks = [];
   txns = {};
-  for (const doc of snap.docs) {
+  const total = snap.docs.length || 1;
+  for (let i = 0; i < snap.docs.length; i++) {
+    const doc = snap.docs[i];
     const st = { id: doc.id, ...doc.data() };
     stocks.push(st);
     if (st.lastPrice) priceCache[doc.id] = { price: st.lastPrice, at: st.lastPriceAt || '' };
+    setProgress(10 + Math.round((i / total) * 70), '載入 ' + st.code + ' 交易紀錄… (' + (i+1) + '/' + total + ')');
     const tSnap = await txnsRef(doc.id).orderBy('date','desc').get();
     txns[doc.id] = tSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
+  setProgress(85, '整理資料…');
 }
 
 async function addStockDb(code, name, market) {
@@ -690,11 +725,17 @@ function renderDetail() {
 
   // Pre-compute avg at time of each sell (replay in chronological order)
   var avgAtSell={};
-  var chronoList=(txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return da>db?1:da<db?-1:0; });
+  // Sort chronologically; on same date, put '買入' before '賣出'
+  var typeOrder={'買入':0,'再投入':0,'賣出':1,'股息':2};
+  var chronoList=(txns[sid]||[]).slice().sort(function(a,b){
+    var da=normDate(a.date),db=normDate(b.date);
+    if(da!==db) return da>db?1:-1;
+    return (typeOrder[a.type]||0)-(typeOrder[b.type]||0);
+  });
   var _bs=0,_bc=0;
   chronoList.forEach(function(t){
-    if(t.type==='buy'){ _bs+=(t.shares||0); _bc+=(t.total||0); }
-    else if(t.type==='sell'){
+    if(t.type==='買入'||t.type==='再投入'){ _bs+=(t.shares||0); _bc+=(t.total||0); }
+    else if(t.type==='賣出'){
       var _avg=_bs>0?_bc/_bs:0;
       avgAtSell[t.id]=_avg;
       _bs-=(t.shares||0); _bc-=(t.shares||0)*_avg;
@@ -1196,11 +1237,16 @@ auth.onAuthStateChanged(async function(user) {
     document.getElementById('app').classList.add('ready');
     document.getElementById('user-name').textContent=user.displayName||user.email;
     if (user.photoURL) document.getElementById('user-avatar').src=user.photoURL;
+    setProgress(5, '驗證身份…');
     await loadData();
+    setProgress(90, '渲染頁面…');
     renderPortfolio();
+    setProgress(100, '完成！');
+    setTimeout(hideLoadingBar, 400);
     fetchAllPrices();
   } else {
     uid=null; stocks=[]; txns={}; priceCache={};
+    hideLoadingBar();
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app').classList.remove('ready');
   }
