@@ -728,11 +728,11 @@ function renderDetail() {
   var chronoList=(txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return da>db?1:da<db?-1:0; });
   var _bs=0,_bc=0;
   chronoList.forEach(function(t){
-    if(t.type==='buy'){ _bs+=(t.shares||0); _bc+=(t.total||0); }
-    else if(t.type==='sell'){
+    if(t.type==='買入'||t.type==='再投入'){ _bs+=+(t.shares||0); _bc+=+(t.total||0); }
+    else if(t.type==='賣出'){
       var _avg=_bs>0?_bc/_bs:0;
       avgAtSell[t.id]=_avg;
-      _bs-=(t.shares||0); _bc-=(t.shares||0)*_avg;
+      _bs-=+(t.shares||0); _bc-=+(t.shares||0)*_avg;
       if(_bs<0)_bs=0; if(_bc<0)_bc=0;
     }
   });
