@@ -688,6 +688,20 @@ function renderDetail() {
   // Sort by date desc
   var list=(txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return db>da?1:db<da?-1:0; });
 
+  // Pre-compute avg at time of each sell (replay in chronological order)
+  var avgAtSell={};
+  var chronoList=(txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return da>db?1:da<db?-1:0; });
+  var _bs=0,_bc=0;
+  chronoList.forEach(function(t){
+    if(t.type==='buy'){ _bs+=(t.shares||0); _bc+=(t.total||0); }
+    else if(t.type==='sell'){
+      var _avg=_bs>0?_bc/_bs:0;
+      avgAtSell[t.id]=_avg;
+      _bs-=(t.shares||0); _bc-=(t.shares||0)*_avg;
+      if(_bs<0)_bs=0; if(_bc<0)_bc=0;
+    }
+  });
+
   var html='<div class="info-card">' +
     '<div class="info-row"><span class="info-label">現值</span><span class="info-value '+(pr>0?pcls(s.unreal):'muted')+'">'+(pr>0?'$'+fn(pr,2):'—')+'</span></div>' +
     '<div class="info-row"><span class="info-label">持有股數</span><span class="info-value">'+fn(s.cur)+' 股</span></div>' +
@@ -707,7 +721,7 @@ function renderDetail() {
     list.forEach(function(tx){
       var bc={'買入':'badge-buy','賣出':'badge-sell','股息':'badge-div','再投入':'badge-reinvest'}[tx.type];
       var sellPnL=null;
-      if (tx.type==='賣出'&&tx.shares) { var c=tx.shares*s.avg,pnl=tx.total-c; sellPnL={c,pnl,pct:c>0?pnl/c:0}; }
+      if (tx.type==='賣出'&&tx.shares) { var _txAvg=(avgAtSell[tx.id]!==undefined?avgAtSell[tx.id]:s.avg); var c=tx.shares*_txAvg,pnl=tx.total-c; sellPnL={c,pnl,pct:c>0?pnl/c:0}; }
       html+='<div class="tx-card">' +
         '<div class="tx-header">' +
           '<span class="badge '+bc+'">'+tx.type+'</span>' +
