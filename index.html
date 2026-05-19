@@ -663,7 +663,7 @@ function renderPortfolio() {
         '</div>' +
         '<div class="summary-sep"></div>' +
         '<div class="summary-item">' +
-          '<div class="summary-item-label">已實現＋股息</div>' +
+          '<div class="summary-item-label">已實現損益</div>' +
           '<div class="summary-item-value '+pcls(tr)+'">'+ps(tr)+fc(tr)+'</div>' +
           '<div class="summary-item-sub green">股息 '+fc(td)+'</div>' +
         '</div>' +
@@ -781,7 +781,7 @@ function renderDetail() {
   });
 
   var html='<div class="info-card">' +
-    '<div class="info-row"><span class="info-label">現值</span><span class="info-value '+(pr>0?pcls(s.unreal):'muted')+'">'+(pr>0?'$'+fn(pr,2):'—')+'</span></div>' +
+    '<div class="info-row"><span class="info-label">現價</span><span class="info-value '+(pr>0?pcls(s.unreal):'muted')+'">'+(pr>0?fn(pr,2):'—')+'</span></div>' +
     '<div class="info-row"><span class="info-label">持有股數</span><span class="info-value">'+fn(s.cur)+' 股</span></div>' +
     '<div class="info-row"><span class="info-label">平均成本</span><span class="info-value">$'+fn(s.avg,2)+'</span></div>' +
     '<div class="info-row"><span class="info-label">總持倉成本</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
