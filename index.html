@@ -731,7 +731,7 @@ function renderDetail() {
     if(t.type==='買入'||t.type==='再投入'){ _bs+=+(t.shares||0); _bc+=+(t.total||0); }
     else if(t.type==='賣出'){
       var _avg=_bs>0?_bc/_bs:0;
-      avgAtSell[t.id]=_avg;
+      avgAtSell[String(t.id)]=_avg;
       _bs-=+(t.shares||0); _bc-=+(t.shares||0)*_avg;
       if(_bs<0)_bs=0; if(_bc<0)_bc=0;
     }
@@ -756,7 +756,7 @@ function renderDetail() {
     list.forEach(function(tx){
       var bc={'買入':'badge-buy','賣出':'badge-sell','股息':'badge-div','再投入':'badge-reinvest'}[tx.type];
       var sellPnL=null;
-      if (tx.type==='賣出'&&tx.shares) { var _txAvg=(avgAtSell[tx.id]!==undefined?avgAtSell[tx.id]:s.avg); var c=tx.shares*_txAvg,pnl=tx.total-c; sellPnL={c,pnl,pct:c>0?pnl/c:0}; }
+      if (tx.type==='賣出'&&tx.shares) { var _txAvg=(avgAtSell[String(tx.id)]!==undefined?avgAtSell[String(tx.id)]:s.avg); var c=+(tx.shares)*_txAvg,pnl=+(tx.total)-c; sellPnL={c:c,pnl:pnl,pct:c>0?pnl/c:0}; }
       html+='<div class="tx-card">' +
         '<div class="tx-header">' +
           '<span class="badge '+bc+'">'+tx.type+'</span>' +
@@ -869,8 +869,25 @@ function renderCharts() {
 
   var html='';
   if (curChartType==='allocation') {
-    html='<div class="chart-wrap"><div class="chart-title">資產配置（市值）'+(curChartMarket!=='all'?' · '+curChartMarket:'')+'</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+    // Market breakdown pie
+    var mktLabels=['台股','美股','基金'], mktCosts=[0,0,0];
+    filteredStocks.forEach(function(st){
+      var pr=getPrice(st.id),s=calc(st.id,pr);
+      var val=s.mv||s.cost;
+      if(st.market==='台股') mktCosts[0]+=val;
+      else if(st.market==='美股') mktCosts[1]+=val;
+      else mktCosts[2]+=val;
+    });
+    mktCosts=mktCosts.map(Math.round);
+    var activeMkt=mktLabels.filter(function(_,i){return mktCosts[i]>0;});
+    var activeCosts=mktCosts.filter(function(v){return v>0;});
+    var mktColors=['#3d8ef0','#f0b429','#34c77b'];
+    var activeMktColors=mktColors.filter(function(_,i){return mktCosts[i]>0;});
+
+    html='<div class="chart-wrap"><div class="chart-title">市場分佈（市值）</div><div class="chart-canvas-wrap"><canvas id="mktChart"></canvas></div></div>' +
+         '<div class="chart-wrap"><div class="chart-title">標的配置（市值）'+(curChartMarket!=='all'?' · '+curChartMarket:'')+'</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
+    chartInstances.push(new Chart(document.getElementById('mktChart'),{type:'doughnut',data:{labels:activeMkt,datasets:[{data:activeCosts,backgroundColor:activeMktColors,borderWidth:2,borderColor:'#1a2840'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#8899aa',font:{size:12},padding:12}}}}}));
     chartInstances.push(new Chart(document.getElementById('myChart'),{type:'doughnut',data:{labels,datasets:[{data:costs,backgroundColor:colors,borderWidth:2,borderColor:'#1a2840'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#8899aa',font:{size:12},padding:12}}}}}));
   } else if (curChartType==='pnl') {
     html='<div class="chart-wrap"><div class="chart-title">損益比較</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
