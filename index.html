@@ -1049,15 +1049,13 @@ function downloadCSV(filename, rows) {
   var csv = rows.map(function(r){
     return r.map(function(cell){
       var s = String(cell==null?'':cell);
-      if (s.includes(',') || s.includes('"') || s.includes('
-')) {
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
         return '"' + s.replace(/"/g,'""') + '"';
       }
       return s;
     }).join(',');
-  }).join('
-');
-  var bom = '﻿';
+  }).join('\n');
+  var bom = '\uFEFF';
   var blob = new Blob([bom+csv], {type:'text/csv;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
