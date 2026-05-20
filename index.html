@@ -602,23 +602,21 @@ async function fetchAllPrices() {
 // ── Calc ───────────────────────────────────────────────────
 function calc(sid, price) {
   var list = txns[sid] || [];
-  // Replay chronologically so avg cost and realized P&L are accurate per-sell
   var sorted = list.slice().sort(function(a,b){
     var da=normDate(a.date), db=normDate(b.date);
     return da>db?1:da<db?-1:0;
   });
-  var bs=0, bc=0, div=0, real=0;
+  var bs=0, bc=0, div=0, real=0, realCost=0;
   sorted.forEach(function(t) {
     if (t.type==='買入'||t.type==='再投入') {
       bs+=+(t.shares||0); bc+=+t.total;
     } else if (t.type==='賣出') {
       var avgNow = bs>0 ? bc/bs : 0;
-      // Use custom sellCost if set, otherwise use avg at this point
       var costPerShare = (t.sellCost!=null&&+t.sellCost>0) ? +t.sellCost : avgNow;
       var sh = +(t.shares||0);
-      // Realized P&L = proceeds - cost
-      real += +t.total - sh*costPerShare;
-      // Reduce remaining cost basis using actual avg (not custom sellCost)
+      var thisCost = sh*costPerShare;
+      real += +t.total - thisCost;
+      realCost += thisCost; // accumulate cost basis of sold shares
       bs -= sh; bc -= sh*avgNow;
       if(bs<0) bs=0; if(bc<0) bc=0;
     } else if (t.type==='股息') {
@@ -631,7 +629,8 @@ function calc(sid, price) {
   var unreal = mv-cost;
   var unrPct = cost>0 ? unreal/cost : 0;
   var retPct = cost>0 ? (real+div+(price>0?unreal:0))/cost : 0;
-  return { cur:bs, avg:avg, cost:cost, div:div, real:real, unreal:unreal, unrPct:unrPct, retPct:retPct, mv:mv };
+  var realPct = realCost>0 ? real/realCost : 0; // realized return rate
+  return { cur:bs, avg:avg, cost:cost, div:div, real:real, realCost:realCost, realPct:realPct, unreal:unreal, unrPct:unrPct, retPct:retPct, mv:mv };
 }
 
 // ── Format ─────────────────────────────────────────────────
@@ -662,6 +661,8 @@ function renderPortfolio() {
     // Calc total return rates
     var retNoDiv = tc>0 ? (tr+tu)/tc : 0;
     var retWithDiv = tc>0 ? (tr+tu+td)/tc : 0;
+    var totalRealCost = Object.values(sums).reduce(function(a,s){ return a+(s.realCost||0); }, 0);
+    var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
     html += '<div class="summary-card">' +
       '<div class="summary-label">總投入成本</div>' +
       '<div class="summary-main">'+fc(tc)+'</div>' +
@@ -675,6 +676,7 @@ function renderPortfolio() {
         '<div class="summary-item">' +
           '<div class="summary-item-label">已實現損益</div>' +
           '<div class="summary-item-value '+pcls(tr)+'">'+ps(tr)+fc(tr)+'</div>' +
+          '<div class="summary-item-sub '+pcls(totalRealPct)+'">'+fp(totalRealPct)+'</div>' +
           '<div class="summary-item-sub green">股息 '+fc(td)+'</div>' +
         '</div>' +
       '</div>' +
@@ -749,24 +751,31 @@ function renderPortfolio() {
           '<button class="delete-btn" data-del="'+st.id+'">🗑</button>' +
         '</div>' +
         '<div class="divider"></div>' +
-        '<div class="price-row">' +
-          '<div class="price-label">現價</div>' +
-          (st.market==='基金' ?
-            '<input class="price-input" type="number" inputmode="decimal" placeholder="手動輸入" value="'+(priceCache[st.id]?priceCache[st.id].price:'')+'" data-pid="'+st.id+'">' :
-            '<div>' +
-              '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?fn(pr,2):'抓取中…')+'</div>' +
-              '<div class="price-time">'+(cache?fmtAt(cache.at):'')+'</div>' +
-            '</div>'
-          ) +
-        '</div>' +
-        '<div class="stats-row">' +
-          '<div class="stat-box"><div class="stat-label">持股</div><div class="stat-value">'+fn(s.cur)+'</div><div class="stat-sub muted">股</div></div>' +
-          '<div class="stat-box"><div class="stat-label">平均成本</div><div class="stat-value">$'+fn(s.avg,2)+'</div></div>' +
-          '<div class="stat-box '+(hp?pbg(s.unreal):'')+'">' +
-            '<div class="stat-label">未實現損益</div>' +
-            (hp?'<div class="stat-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+'</div><div class="stat-sub '+pcls(s.unrPct)+'">'+fp(s.unrPct)+'</div>':'<div class="stat-value muted">—</div>') +
+        (s.cur<=0 ?
+          '<div class="stats-row">' +
+            '<div class="stat-box '+pbg(s.real)+'"><div class="stat-label">已實現損益</div><div class="stat-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+'</div><div class="stat-sub '+pcls(s.realPct)+'">'+fp(s.realPct)+'</div></div>' +
+            '<div class="stat-box bg-green"><div class="stat-label">累計股息</div><div class="stat-value green">'+fc(s.div)+'</div></div>' +
+            '<div class="stat-box '+pbg(s.real+s.div)+'"><div class="stat-label">總報酬（含息）</div><div class="stat-value '+pcls(s.real+s.div)+'">'+ps(s.real+s.div)+fc(s.real+s.div)+'</div></div>' +
+          '</div>' :
+          '<div class="price-row">' +
+            '<div class="price-label">現價</div>' +
+            (st.market==='基金' ?
+              '<input class="price-input" type="number" inputmode="decimal" placeholder="手動輸入" value="'+(priceCache[st.id]?priceCache[st.id].price:'')+'" data-pid="'+st.id+'">' :
+              '<div>' +
+                '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?fn(pr,2):'抓取中…')+'</div>' +
+                '<div class="price-time">'+(cache?fmtAt(cache.at):'')+'</div>' +
+              '</div>'
+            ) +
           '</div>' +
-        '</div>' +
+          '<div class="stats-row">' +
+            '<div class="stat-box"><div class="stat-label">持股</div><div class="stat-value">'+fn(s.cur)+'</div><div class="stat-sub muted">股</div></div>' +
+            '<div class="stat-box"><div class="stat-label">平均成本</div><div class="stat-value">$'+fn(s.avg,2)+'</div></div>' +
+            '<div class="stat-box '+(hp?pbg(s.unreal):'')+'">' +
+              '<div class="stat-label">未實現損益</div>' +
+              (hp?'<div class="stat-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+'</div><div class="stat-sub '+pcls(s.unrPct)+'">'+fp(s.unrPct)+'</div>':'<div class="stat-value muted">—</div>') +
+            '</div>' +
+          '</div>'
+        ) +
         '<button class="detail-link" data-goto="'+st.id+'">查看明細 →</button>' +
       '</div>';
     });
