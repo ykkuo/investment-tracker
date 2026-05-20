@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="投資追蹤">
 <meta name="theme-color" content="#0f1923">
+<link rel="apple-touch-icon" href="icon.png">
 <title>投資損益追蹤</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -66,7 +67,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .badge-blue{background:rgba(61,142,240,0.15);color:var(--accent2)}
 .badge-buy{background:rgba(52,199,123,0.15);color:var(--green)}
 .badge-sell{background:rgba(255,92,92,0.15);color:var(--red)}
-.badge-div{background:var(--green-bg);color:var(--green)}
+.badge-div{background:rgba(240,180,41,0.18);color:var(--gold)}
 .badge-reinvest{background:var(--purple-bg);color:var(--purple)}
 .divider{height:1px;background:var(--border);margin:12px 0}
 .price-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
@@ -162,6 +163,10 @@ textarea.input{height:72px;resize:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* ── Filter bar ── */
 .filter-bar{display:flex;gap:8px;padding:12px 0 4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.sort-bar{display:flex;gap:8px;padding:4px 0 4px;align-items:center}
+.sort-label{font-size:11px;color:var(--text3);flex-shrink:0;font-weight:600}
+.sort-btn{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px}
+.sort-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
 .filter-btn{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0}
 .filter-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
 /* ── Tx edit btn ── */
@@ -476,6 +481,8 @@ var chartInstances = [];
 var importRows = [];
 var showFilter = 'holding'; // 'holding' | 'all'
 var showMarket = 'all'; // 'all' | '台股' | '美股' | '基金'
+var sortBy = 'code'; // 'code' | 'value'
+var sortDir = 'asc'; // 'asc' | 'desc'
 var curEditTxId = null;
 
 // ── Firebase helpers ───────────────────────────────────────
@@ -586,7 +593,7 @@ async function fetchPrice(sid, code, market) {
 
 async function fetchAllPrices() {
   document.getElementById('header-sub').textContent = '更新價格中…';
-  const promises = stocks.map(st => fetchPrice(st.id, st.code, st.market));
+  const promises = stocks.filter(st => st.market!=='基金').map(st => fetchPrice(st.id, st.code, st.market));
   await Promise.all(promises);
   document.getElementById('header-sub').textContent = '價格已更新 ' + new Date().toLocaleTimeString('zh-TW');
   renderPortfolio();
@@ -652,6 +659,9 @@ function renderPortfolio() {
   var html='';
 
   if (stocks.length>0) {
+    // Calc total return rates
+    var retNoDiv = tc>0 ? (tr+tu)/tc : 0;
+    var retWithDiv = tc>0 ? (tr+tu+td)/tc : 0;
     html += '<div class="summary-card">' +
       '<div class="summary-label">總投入成本</div>' +
       '<div class="summary-main">'+fc(tc)+'</div>' +
@@ -667,11 +677,26 @@ function renderPortfolio() {
           '<div class="summary-item-value '+pcls(tr)+'">'+ps(tr)+fc(tr)+'</div>' +
           '<div class="summary-item-sub green">股息 '+fc(td)+'</div>' +
         '</div>' +
-      '</div></div>';
+      '</div>' +
+      '<div style="height:1px;background:rgba(255,255,255,0.1);margin:12px 0"></div>' +
+      '<div class="summary-grid">' +
+        '<div class="summary-item">' +
+          '<div class="summary-item-label">總報酬率（未含息）</div>' +
+          '<div class="summary-item-value '+pcls(retNoDiv)+'">'+fp(retNoDiv)+'</div>' +
+        '</div>' +
+        '<div class="summary-sep"></div>' +
+        '<div class="summary-item">' +
+          '<div class="summary-item-label">總報酬率（含息）</div>' +
+          '<div class="summary-item-value '+pcls(retWithDiv)+'">'+fp(retWithDiv)+'</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
 
     // Filter bar
+    var sortIcon = sortDir==='asc' ? '↑' : '↓';
     html += '<div class="filter-bar">' +
       '<button class="filter-btn'+(showFilter==='holding'?' active':'')+'" data-filter="holding" data-type="holding">持有中</button>' +
+      '<button class="filter-btn'+(showFilter==='sold'?' active':'')+'" data-filter="sold" data-type="holding">已出清</button>' +
       '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all" data-type="holding">全部</button>' +
     '</div>' +
     '<div class="filter-bar" style="padding-top:4px">' +
@@ -679,36 +704,60 @@ function renderPortfolio() {
       '<button class="filter-btn'+(showMarket==='台股'?' active':'')+'" data-market="台股">台股</button>' +
       '<button class="filter-btn'+(showMarket==='美股'?' active':'')+'" data-market="美股">美股</button>' +
       '<button class="filter-btn'+(showMarket==='基金'?' active':'')+'" data-market="基金">基金</button>' +
+    '</div>' +
+    '<div class="sort-bar">' +
+      '<span class="sort-label">排序：</span>' +
+      '<button class="sort-btn'+(sortBy==='code'?' active':'')+'" data-sort="code">代號</button>' +
+      '<button class="sort-btn'+(sortBy==='value'?' active':'')+'" data-sort="value">市值</button>' +
+      '<button class="sort-btn" data-sortdir>' + sortIcon + (sortDir==='asc'?' 升冪':' 降冪') + '</button>' +
     '</div>';
   }
 
   if (stocks.length===0) {
     html += '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-msg">尚無投資標的</div><div class="empty-sub">點右上角 ＋ 新增第一個標的</div></div>';
   } else {
-    stocks.forEach(function(st){
+    // Sort stocks
+    var sortedStocks = stocks.slice().sort(function(a,b){
+      var sa=sums[a.id], sb=sums[b.id];
+      var va, vb;
+      if (sortBy==='value') {
+        va = (getPrice(a.id)||0)*sa.cur;
+        vb = (getPrice(b.id)||0)*sb.cur;
+      } else {
+        va = a.code; vb = b.code;
+      }
+      if (va < vb) return sortDir==='asc' ? -1 : 1;
+      if (va > vb) return sortDir==='asc' ? 1 : -1;
+      return 0;
+    });
+    sortedStocks.forEach(function(st){
       var s=sums[st.id], pr=getPrice(st.id), hp=pr>0;
       var cache=priceCache[st.id];
-      // Filter: holding/all and market
+      // Filter: holding/all/sold and market
       if (showFilter==='holding' && s.cur<=0) return;
+      if (showFilter==='sold' && s.cur>0) return;
       if (showMarket!=='all' && st.market!==showMarket) return;
       html += '<div class="stock-card" data-sid="'+st.id+'">' +
         '<div class="stock-card-top">' +
           '<div>' +
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
-              '<span class="stock-code">'+st.code+'</span>' +
+              '<span class="stock-name" style="font-size:16px;font-weight:800;color:var(--text)">'+st.name+'</span>' +
               '<span class="badge badge-blue">'+st.market+'</span>' +
             '</div>' +
-            '<div class="stock-name">'+st.name+'</div>' +
+            '<div class="stock-code" style="font-size:13px;font-weight:600;color:var(--text2);margin-top:2px">'+st.code+'</div>' +
           '</div>' +
           '<button class="delete-btn" data-del="'+st.id+'">🗑</button>' +
         '</div>' +
         '<div class="divider"></div>' +
         '<div class="price-row">' +
           '<div class="price-label">現價</div>' +
-          '<div>' +
-            '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?'$'+fn(pr,2):'抓取中…')+'</div>' +
-            '<div class="price-time">'+(cache?fmtAt(cache.at):'')+'</div>' +
-          '</div>' +
+          (st.market==='基金' ?
+            '<input class="price-input" type="number" inputmode="decimal" placeholder="手動輸入" value="'+(priceCache[st.id]?priceCache[st.id].price:'')+'" data-pid="'+st.id+'">' :
+            '<div>' +
+              '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?fn(pr,2):'抓取中…')+'</div>' +
+              '<div class="price-time">'+(cache?fmtAt(cache.at):'')+'</div>' +
+            '</div>'
+          ) +
         '</div>' +
         '<div class="stats-row">' +
           '<div class="stat-box"><div class="stat-label">持股</div><div class="stat-value">'+fn(s.cur)+'</div><div class="stat-sub muted">股</div></div>' +
@@ -729,6 +778,21 @@ function renderPortfolio() {
   });
   document.querySelectorAll('[data-market]').forEach(function(btn){
     btn.addEventListener('click', function(){ showMarket=this.dataset.market; renderPortfolio(); });
+  });
+  document.querySelectorAll('[data-sort]').forEach(function(btn){
+    btn.addEventListener('click', function(){ sortBy=this.dataset.sort; renderPortfolio(); });
+  });
+  document.querySelectorAll('[data-sortdir]').forEach(function(btn){
+    btn.addEventListener('click', function(){ sortDir=sortDir==='asc'?'desc':'asc'; renderPortfolio(); });
+  });
+  document.querySelectorAll('[data-pid]').forEach(function(inp){
+    inp.addEventListener('click', function(e){ e.stopPropagation(); });
+    inp.addEventListener('input', function(){
+      var sid=this.dataset.pid, val=parseFloat(this.value)||0;
+      savePriceDb(sid, val);
+      priceCache[sid]={price:val, at:new Date().toISOString()};
+      renderPortfolio();
+    });
   });
   document.querySelectorAll('[data-goto]').forEach(function(btn){
     btn.addEventListener('click', function(){ showDetail(this.dataset.goto); });
