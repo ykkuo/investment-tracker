@@ -658,9 +658,7 @@ function renderPortfolio() {
   var html='';
 
   if (stocks.length>0) {
-    // Calc total return rates
-    var retNoDiv = tc>0 ? (tr+tu)/tc : 0;
-    var retWithDiv = tc>0 ? (tr+tu+td)/tc : 0;
+    // Calc realized return rate
     var totalRealCost = Object.values(sums).reduce(function(a,s){ return a+(s.realCost||0); }, 0);
     var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
     html += '<div class="summary-card">' +
@@ -678,18 +676,6 @@ function renderPortfolio() {
           '<div class="summary-item-value '+pcls(tr)+'">'+ps(tr)+fc(tr)+'</div>' +
           '<div class="summary-item-sub '+pcls(totalRealPct)+'">'+fp(totalRealPct)+'</div>' +
           '<div class="summary-item-sub green">股息 '+fc(td)+'</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="height:1px;background:rgba(255,255,255,0.1);margin:12px 0"></div>' +
-      '<div class="summary-grid">' +
-        '<div class="summary-item">' +
-          '<div class="summary-item-label">總報酬率（未含息）</div>' +
-          '<div class="summary-item-value '+pcls(retNoDiv)+'">'+fp(retNoDiv)+'</div>' +
-        '</div>' +
-        '<div class="summary-sep"></div>' +
-        '<div class="summary-item">' +
-          '<div class="summary-item-label">總報酬率（含息）</div>' +
-          '<div class="summary-item-value '+pcls(retWithDiv)+'">'+fp(retWithDiv)+'</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -711,6 +697,7 @@ function renderPortfolio() {
       '<span class="sort-label">排序：</span>' +
       '<button class="sort-btn'+(sortBy==='code'?' active':'')+'" data-sort="code">代號</button>' +
       '<button class="sort-btn'+(sortBy==='value'?' active':'')+'" data-sort="value">市值</button>' +
+      '<button class="sort-btn'+(sortBy==='totalReturn'?' active':'')+'" data-sort="totalReturn">總報酬</button>' +
       '<button class="sort-btn" data-sortdir>' + sortIcon + (sortDir==='asc'?' 升冪':' 降冪') + '</button>' +
     '</div>';
   }
@@ -725,6 +712,9 @@ function renderPortfolio() {
       if (sortBy==='value') {
         va = (getPrice(a.id)||0)*sa.cur;
         vb = (getPrice(b.id)||0)*sb.cur;
+      } else if (sortBy==='totalReturn') {
+        va = sa.real + sa.div + (getPrice(a.id)>0 ? sa.unreal : 0);
+        vb = sb.real + sb.div + (getPrice(b.id)>0 ? sb.unreal : 0);
       } else {
         va = a.code; vb = b.code;
       }
