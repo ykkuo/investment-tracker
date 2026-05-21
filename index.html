@@ -170,7 +170,10 @@ textarea.input{height:72px;resize:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* ── Filter bar ── */
 .filter-bar{display:flex;gap:8px;padding:12px 0 4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.sort-bar{display:flex;gap:8px;padding:4px 0 4px;align-items:center}
+.sort-bar{display:flex;gap:8px;padding:4px 0 4px;align-items:center;flex-wrap:wrap}
+.stock-select{width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;color:var(--text);font-family:inherit;outline:none;-webkit-appearance:none;appearance:none;margin-bottom:4px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238899aa' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.edit-stock-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;line-height:1}
+.edit-stock-btn:active{color:var(--accent2)}
 .sort-label{font-size:11px;color:var(--text3);flex-shrink:0;font-weight:600}
 .sort-btn{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px}
 .sort-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
@@ -494,8 +497,9 @@ var chartInstances = [];
 var importRows = [];
 var showFilter = 'holding'; // 'holding' | 'all'
 var showMarket = 'all'; // 'all' | '台股' | '美股' | '基金'
-var sortBy = 'code'; // 'code' | 'value'
+var sortBy = 'code'; // 'code' | 'value' | 'totalReturn' | 'recent'
 var sortDir = 'asc'; // 'asc' | 'desc'
+var filterStock = 'all'; // 'all' | stock id
 var curEditTxId = null;
 
 // ── Firebase helpers ───────────────────────────────────────
@@ -538,6 +542,12 @@ async function addStockDb(code, name, market) {
   stocks.push({ id: ref.id, code, name, market });
   txns[ref.id] = [];
   return ref.id;
+}
+
+async function updateStockDb(sid, code, name) {
+  await stocksRef().doc(sid).update({ code: code, name: name });
+  var st = stocks.find(function(s){ return s.id===sid; });
+  if (st) { st.code=code; st.name=name; }
 }
 
 async function deleteStockDb(sid) {
@@ -725,13 +735,20 @@ function renderPortfolio() {
       '<button class="filter-btn'+(showFilter==='holding'?' active':'')+'" data-filter="holding" data-type="holding">持有中</button>' +
       '<button class="filter-btn'+(showFilter==='sold'?' active':'')+'" data-filter="sold" data-type="holding">已出清</button>' +
       '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all" data-type="holding">全部</button>' +
-    '</div>' +
+    '</div>';
 
-    '<div class="sort-bar">' +
+    // Build stock dropdown options
+    var stockOptions='<option value="all">全部標的</option>';
+    stocks.forEach(function(st){
+      stockOptions+='<option value="'+st.id+'"'+(filterStock===st.id?' selected':'')+'>'+st.code+' '+st.name+'</option>';
+    });
+    html += '<select class="stock-select" id="stock-filter-select">'+stockOptions+'</select>';
+    html += '<div class="sort-bar">' +
       '<span class="sort-label">排序：</span>' +
       '<button class="sort-btn'+(sortBy==='code'?' active':'')+'" data-sort="code">代號</button>' +
       '<button class="sort-btn'+(sortBy==='value'?' active':'')+'" data-sort="value">市值</button>' +
       '<button class="sort-btn'+(sortBy==='totalReturn'?' active':'')+'" data-sort="totalReturn">總報酬</button>' +
+      '<button class="sort-btn'+(sortBy==='recent'?' active':'')+'" data-sort="recent">最近交易</button>' +
       '<button class="sort-btn" data-sortdir>' + sortIcon + (sortDir==='asc'?' 升冪':' 降冪') + '</button>' +
     '</div>';
   }
@@ -749,6 +766,9 @@ function renderPortfolio() {
       } else if (sortBy==='totalReturn') {
         va = sa.real + sa.div + (getPrice(a.id)>0 ? sa.unreal : 0);
         vb = sb.real + sb.div + (getPrice(b.id)>0 ? sb.unreal : 0);
+      } else if (sortBy==='recent') {
+        va = sa.lastDate || '';
+        vb = sb.lastDate || '';
       } else {
         va = a.code; vb = b.code;
       }
@@ -759,10 +779,11 @@ function renderPortfolio() {
     sortedStocks.forEach(function(st){
       var s=sums[st.id], pr=getPrice(st.id), hp=pr>0;
       var cache=priceCache[st.id];
-      // Filter: holding/all/sold and market
+      // Filter: holding/all/sold, market, and specific stock
       if (showFilter==='holding' && s.cur<=0) return;
       if (showFilter==='sold' && s.cur>0) return;
       if (showMarket!=='all' && st.market!==showMarket) return;
+      if (filterStock!=='all' && st.id!==filterStock) return;
       html += '<div class="stock-card'+(s.cur<=0?' sold':'')+'" data-sid="'+st.id+'">' +
         '<div class="stock-card-top">' +
           '<div>' +
@@ -772,7 +793,10 @@ function renderPortfolio() {
             '</div>' +
             '<div class="stock-code" style="font-size:13px;font-weight:600;color:var(--text2);margin-top:2px">'+st.code+'</div>' +
           '</div>' +
-          '<button class="delete-btn" data-del="'+st.id+'">🗑</button>' +
+          '<div style="display:flex;gap:4px;align-items:center">' +
+            '<button class="edit-stock-btn" data-edit-stock="'+st.id+'" title="編輯">✏️</button>' +
+            '<button class="delete-btn" data-del="'+st.id+'">🗑</button>' +
+          '</div>' +
         '</div>' +
         '<div class="divider"></div>' +
         (s.cur<=0 ?
@@ -808,6 +832,11 @@ function renderPortfolio() {
 
   document.querySelectorAll('[data-filter]').forEach(function(btn){
     btn.addEventListener('click', function(){ showFilter=this.dataset.filter; renderPortfolio(); });
+  });
+  var sel=document.getElementById('stock-filter-select');
+  if(sel) sel.addEventListener('change', function(){ filterStock=this.value; renderPortfolio(); });
+  document.querySelectorAll('[data-edit-stock]').forEach(function(btn){
+    btn.addEventListener('click', function(e){ e.stopPropagation(); openEditStock(this.dataset.editStock); });
   });
   // market filter hidden
   document.querySelectorAll('[data-sort]').forEach(function(btn){
@@ -1170,10 +1199,52 @@ async function submitAddStock() {
   var code=document.getElementById('f-code').value.trim().toUpperCase();
   var name=document.getElementById('f-name').value.trim();
   if (!code||!name) { alert('請填寫代號和名稱'); return; }
+
+  // Check for duplicate code
+  var existing = stocks.find(function(s){ return s.code.trim().toUpperCase()===code; });
+  if (existing) {
+    alert('「'+code+'」已存在！');
+    return;
+  }
+
   var sid=await addStockDb(code,name,curMarket);
   document.getElementById('m-stock').classList.remove('open');
   renderPortfolio();
   fetchPrice(sid,code,curMarket);
+
+  // Navigate directly to add transaction screen
+  showDetail(sid);
+  openAddTx();
+}
+
+var editingStockId = null;
+function openEditStock(sid) {
+  editingStockId = sid;
+  var st = stocks.find(function(s){ return s.id===sid; });
+  if (!st) return;
+  document.getElementById('es-code').value = st.code;
+  document.getElementById('es-name').value = st.name;
+  var submitBtn = document.getElementById('btn-submit-edit-stock');
+  var cancelBtn = document.getElementById('btn-cancel-edit-stock');
+  var newSubmit = submitBtn.cloneNode(true);
+  var newCancel = cancelBtn.cloneNode(true);
+  submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
+  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+  newSubmit.addEventListener('click', submitEditStock);
+  newCancel.addEventListener('click', function(){ document.getElementById('m-edit-stock').classList.remove('open'); });
+  document.getElementById('m-edit-stock').classList.add('open');
+}
+
+async function submitEditStock() {
+  var code = document.getElementById('es-code').value.trim().toUpperCase();
+  var name = document.getElementById('es-name').value.trim();
+  if (!code||!name) { alert('請填寫代號和名稱'); return; }
+  // Check duplicate (exclude current stock)
+  var dup = stocks.find(function(s){ return s.code.trim().toUpperCase()===code && s.id!==editingStockId; });
+  if (dup) { alert('「'+code+'」已存在！'); return; }
+  await updateStockDb(editingStockId, code, name);
+  document.getElementById('m-edit-stock').classList.remove('open');
+  renderPortfolio();
 }
 
 async function deleteStock(sid) {
@@ -1547,6 +1618,7 @@ document.getElementById('file-input').addEventListener('change',function(e){
 });
 
 document.getElementById('m-stock').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
+document.getElementById('m-edit-stock').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('m-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('m-edit-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
 document.getElementById('btn-export-csv').addEventListener('click', exportTxCSV);
@@ -1557,5 +1629,22 @@ document.getElementById('btn-cancel-edit-tx').addEventListener('click', function
 
 // market tabs hidden
 </script>
+<!-- ══ EDIT STOCK MODAL ══ -->
+<div class="overlay" id="m-edit-stock">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">編輯標的</div>
+    <div class="field">
+      <label class="field-label">標的代號</label>
+      <input class="input" id="es-code" autocapitalize="characters" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-label">標的名稱</label>
+      <input class="input" id="es-name" autocomplete="off">
+    </div>
+    <button class="btn-primary c-blue" id="btn-submit-edit-stock">儲存</button>
+    <button class="btn-ghost" id="btn-cancel-edit-stock">取消</button>
+  </div>
+</div>
 </body>
 </html>
