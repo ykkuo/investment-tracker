@@ -682,6 +682,8 @@ function renderPortfolio() {
   var sums={};
   stocks.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
+    var list=txns[st.id]||[];
+    s.lastDate=list.reduce(function(mx,t){ return (t.date||'')>mx?t.date:mx; },'');
     sums[st.id]=s;
   });
   // Apply same filter as cards for summary
@@ -843,7 +845,7 @@ function renderPortfolio() {
   var sel=document.getElementById('stock-filter-select');
   if(sel) sel.addEventListener('change', function(){ filterStock=this.value; renderPortfolio(); });
   document.querySelectorAll('[data-edit-stock]').forEach(function(btn){
-    btn.addEventListener('click', function(e){ e.stopPropagation(); openEditStock(this.dataset.editStock); });
+    btn.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); openEditStock(this.dataset.editStock); });
   });
   // market filter hidden
   document.querySelectorAll('[data-sort]').forEach(function(btn){
@@ -1117,7 +1119,7 @@ function renderCharts() {
   } else if (curChartType==='bubble') {
     // Only holding stocks (cur > 0)
     var bubbleData=[];
-    filteredStocks.forEach(function(st){
+    stocks.forEach(function(st){
       var pr=getPrice(st.id), s=calc(st.id,pr);
       if (s.cur<=0 || pr<=0) return;
       bubbleData.push({
