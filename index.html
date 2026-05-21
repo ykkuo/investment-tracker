@@ -60,6 +60,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .summary-item-sub{font-size:11px;margin-top:2px}
 /* ── Stock card ── */
 .stock-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px}
+.stock-card.sold{background:rgba(13,20,30,0.6);border:1px solid rgba(255,255,255,0.07);opacity:0.72}
+.stock-card.sold .stock-name{color:var(--text3)!important}
+.stock-card.sold{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);opacity:0.75}
+.stock-card.sold .stock-name{color:var(--text2)!important}
 .stock-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
 .stock-code{font-size:20px;font-weight:800}
 .stock-name{font-size:13px;color:var(--text2);margin-top:2px}
@@ -644,17 +648,33 @@ function normDate(d){ return d?String(d).replace(/\//g,'-'):'' ; }
 function getPrice(sid){ return priceCache[sid]?.price || 0; }
 
 function renderPortfolio() {
-  var tc=0,tm=0,tr=0,td=0,sums={};
+  var sums={};
   stocks.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
-    sums[st.id]=s; tc+=s.cost; tm+=s.mv; tr+=s.real; td+=s.div;
+    sums[st.id]=s;
+  });
+  // Apply same filter as cards for summary
+  var tc=0,tm=0,tr=0,td=0;
+  stocks.forEach(function(st){
+    var s=sums[st.id];
+    if (showFilter==='holding' && s.cur<=0) return;
+    if (showFilter==='sold' && s.cur>0) return;
+    if (showMarket!=='all' && st.market!==showMarket) return;
+    tc+=s.cost; tm+=s.mv; tr+=s.real; td+=s.div;
   });
   var tu=tm-tc, tuPct=tc>0?tu/tc:0;
   var html='';
 
   if (stocks.length>0) {
-    // Calc realized return rate
-    var totalRealCost = Object.values(sums).reduce(function(a,s){ return a+(s.realCost||0); }, 0);
+    // Calc realized return rate (filtered)
+    var totalRealCost = 0;
+    stocks.forEach(function(st){
+      var s=sums[st.id];
+      if (showFilter==='holding' && s.cur<=0) return;
+      if (showFilter==='sold' && s.cur>0) return;
+      if (showMarket!=='all' && st.market!==showMarket) return;
+      totalRealCost += (s.realCost||0);
+    });
     var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
     html += '<div class="summary-card">' +
       '<div class="summary-label">總投入成本</div>' +
@@ -719,7 +739,7 @@ function renderPortfolio() {
       if (showFilter==='holding' && s.cur<=0) return;
       if (showFilter==='sold' && s.cur>0) return;
       if (showMarket!=='all' && st.market!==showMarket) return;
-      html += '<div class="stock-card" data-sid="'+st.id+'">' +
+      html += '<div class="stock-card'+(s.cur<=0?' sold':'')+'" data-sid="'+st.id+'">' +
         '<div class="stock-card-top">' +
           '<div>' +
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
