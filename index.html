@@ -243,12 +243,7 @@ textarea.input{height:72px;resize:none}
 
   <!-- Charts Tab -->
   <div class="tab-content" id="tab-charts">
-    <div class="market-tabs" id="market-tabs">
-      <button class="market-tab active" data-market="all">全部</button>
-      <button class="market-tab" data-market="台股">台股</button>
-      <button class="market-tab" data-market="美股">美股</button>
-      <button class="market-tab" data-market="基金">基金</button>
-    </div>
+
     <div class="chart-tabs">
       <button class="chart-tab active" data-chart="allocation">資產配置</button>
       <button class="chart-tab" data-chart="pnl">損益比較</button>
@@ -687,12 +682,7 @@ function renderPortfolio() {
       '<button class="filter-btn'+(showFilter==='sold'?' active':'')+'" data-filter="sold" data-type="holding">已出清</button>' +
       '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all" data-type="holding">全部</button>' +
     '</div>' +
-    '<div class="filter-bar" style="padding-top:4px">' +
-      '<button class="filter-btn'+(showMarket==='all'?' active':'')+'" data-market="all">全部市場</button>' +
-      '<button class="filter-btn'+(showMarket==='台股'?' active':'')+'" data-market="台股">台股</button>' +
-      '<button class="filter-btn'+(showMarket==='美股'?' active':'')+'" data-market="美股">美股</button>' +
-      '<button class="filter-btn'+(showMarket==='基金'?' active':'')+'" data-market="基金">基金</button>' +
-    '</div>' +
+
     '<div class="sort-bar">' +
       '<span class="sort-label">排序：</span>' +
       '<button class="sort-btn'+(sortBy==='code'?' active':'')+'" data-sort="code">代號</button>' +
@@ -775,9 +765,7 @@ function renderPortfolio() {
   document.querySelectorAll('[data-filter]').forEach(function(btn){
     btn.addEventListener('click', function(){ showFilter=this.dataset.filter; renderPortfolio(); });
   });
-  document.querySelectorAll('[data-market]').forEach(function(btn){
-    btn.addEventListener('click', function(){ showMarket=this.dataset.market; renderPortfolio(); });
-  });
+  // market filter hidden
   document.querySelectorAll('[data-sort]').forEach(function(btn){
     btn.addEventListener('click', function(){ sortBy=this.dataset.sort; renderPortfolio(); });
   });
@@ -1095,7 +1083,8 @@ function openAddStock() {
   document.getElementById('f-code').value='';
   document.getElementById('f-name').value='';
   curMarket='台股';
-  renderSeg('seg-market',['台股','美股','基金'],curMarket,'market');
+  renderSeg('seg-market',['台股'],curMarket,'market');
+  curMarket='台股';
   document.getElementById('m-stock').classList.add('open');
 }
 
@@ -1469,14 +1458,7 @@ document.getElementById('btn-export-summary').addEventListener('click', exportSu
 document.getElementById('btn-submit-edit-tx').addEventListener('click', submitEditTx);
 document.getElementById('btn-cancel-edit-tx').addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
 
-document.querySelectorAll('.market-tab').forEach(function(btn){
-  btn.addEventListener('click',function(){
-    document.querySelectorAll('.market-tab').forEach(function(b){ b.classList.remove('active'); });
-    this.classList.add('active');
-    curChartMarket=this.dataset.market;
-    renderCharts();
-  });
-});
+// market tabs hidden
 </script>
 </body>
 </html>
