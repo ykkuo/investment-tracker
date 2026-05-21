@@ -202,7 +202,7 @@ textarea.input{height:72px;resize:none}
   .progress-track {
     width:220px; height:4px; background:var(--bg3); border-radius:9999px; overflow:hidden;
   }
-  .progress-fill {
+  .progress-fill, #progress-fill {
     height:100%; background:var(--accent2); border-radius:9999px;
     transition:width 0.3s ease; width:0%;
   }
@@ -210,6 +210,13 @@ textarea.input{height:72px;resize:none}
   </style>
 </head>
 <body>
+
+<!-- ══ LOADING BAR ══ -->
+<div id="loading-bar-wrap">
+  <div class="loading-logo">📊</div>
+  <div class="loading-sub" id="loading-sub">載入中…</div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+</div>
 
 <!-- ══ LOGIN SCREEN ══ -->
 <div id="login-screen">
@@ -1107,6 +1114,67 @@ function renderCharts() {
     document.getElementById('chart-area').innerHTML=html;
     var bgColors=retPcts.map(function(v){ return v>=0?'rgba(52,199,123,0.7)':'rgba(255,92,92,0.7)'; });
     chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:labels,names:names,datasets:[{label:'報酬率 %',data:retPcts,backgroundColor:bgColors,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[idx]:'';return code?(this.chart.data.labels[idx]+'('+code+')'):(this.chart.data.labels[idx]);},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}}));
+  } else if (curChartType==='bubble') {
+    // Only holding stocks (cur > 0)
+    var bubbleData=[];
+    filteredStocks.forEach(function(st){
+      var pr=getPrice(st.id), s=calc(st.id,pr);
+      if (s.cur<=0 || pr<=0) return;
+      bubbleData.push({
+        x: Math.round(s.unreal),
+        y: parseFloat((s.unrPct*100).toFixed(2)),
+        r: Math.max(6, Math.round(Math.sqrt(s.mv)/18)),
+        name: st.name,
+        code: st.code,
+        mv: s.mv,
+        unreal: s.unreal,
+        unrPct: s.unrPct
+      });
+    });
+    html='<div class="chart-wrap"><div class="chart-title">持倉泡泡圖</div><div class="chart-canvas-wrap" style="height:320px"><canvas id="myChart"></canvas></div></div>';
+    document.getElementById('chart-area').innerHTML=html;
+    var bubbleColors=bubbleData.map(function(d){ return d.unreal>=0?'rgba(52,199,123,0.75)':'rgba(255,92,92,0.75)'; });
+    chartInstances.push(new Chart(document.getElementById('myChart'),{
+      type:'bubble',
+      data:{datasets:[{
+        data:bubbleData,
+        backgroundColor:bubbleColors,
+        borderColor:bubbleColors.map(function(c){return c.replace('0.75','1');}),
+        borderWidth:1
+      }]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{
+            label:function(ctx){
+              var d=ctx.raw;
+              return [
+                d.name+'('+d.code+')',
+                '未實現損益: '+(d.unreal>=0?'+':'')+d.unreal.toLocaleString('zh-TW'),
+                '報酬率: '+(d.unrPct>=0?'+':'')+( d.unrPct*100).toFixed(2)+'%',
+                '市值: $'+Math.round(d.mv).toLocaleString('zh-TW')
+              ];
+            },
+            title:function(){ return ''; }
+          }}
+        },
+        scales:{
+          x:{
+            title:{display:true,text:'未實現損益（元）',color:'#8899aa'},
+            ticks:{color:'#8899aa',callback:function(v){return v>=0?'+$'+v.toLocaleString('zh-TW'):'-$'+Math.abs(v).toLocaleString('zh-TW');}},
+            grid:{color:'#2a3d55'},
+            border:{color:'#4a5d70'}
+          },
+          y:{
+            title:{display:true,text:'未實現報酬率（%）',color:'#8899aa'},
+            ticks:{color:'#8899aa',callback:function(v){return v+'%';}},
+            grid:{color:'#2a3d55'},
+            border:{color:'#4a5d70'}
+          }
+        }
+      }
+    }));
   }
 }
 
