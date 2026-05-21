@@ -686,18 +686,20 @@ function renderPortfolio() {
     });
     var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
     html += '<div class="summary-card">' +
-      '<div class="summary-top">' +
-        '<div>' +
+      '<div class="summary-grid" style="margin-bottom:12px">' +
+        '<div class="summary-item" style="padding-left:0">' +
           '<div class="summary-label">總投入成本</div>' +
-          '<div class="summary-main">'+fc(tc)+'</div>' +
+          '<div class="summary-main" style="margin-bottom:0">'+fc(tc)+'</div>' +
         '</div>' +
-        '<div class="summary-top-right">' +
+        '<div class="summary-sep"></div>' +
+        '<div class="summary-item">' +
           '<div class="summary-label">總賣出成本</div>' +
-          '<div class="summary-main-sm">'+fc(totalRealCost)+'</div>' +
+          '<div class="summary-main" style="margin-bottom:0">'+fc(totalRealCost)+'</div>' +
         '</div>' +
       '</div>' +
+      '<div style="height:1px;background:rgba(255,255,255,0.1);margin-bottom:12px"></div>' +
       '<div class="summary-grid">' +
-        '<div class="summary-item">' +
+        '<div class="summary-item" style="padding-left:0">' +
           '<div class="summary-item-label">未實現損益</div>' +
           '<div class="summary-item-value '+pcls(tu)+'">'+ps(tu)+fc(tu)+'</div>' +
           '<div class="summary-item-sub '+pcls(tuPct)+'">'+fp(tuPct)+'</div>' +
