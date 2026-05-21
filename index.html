@@ -51,6 +51,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .summary-card{background:linear-gradient(135deg,#1a3a6b,#0f2244);border:1px solid #2d5299;border-radius:16px;padding:20px;margin-bottom:16px}
 .summary-label{font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1px;text-transform:uppercase}
 .summary-main{font-size:32px;font-weight:800;color:#fff;margin:6px 0 16px}
+.summary-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.summary-top-right{text-align:right}
+.summary-main-sm{font-size:24px;font-weight:800;color:#fff;margin:4px 0 0}
 .summary-grid{display:flex}
 .summary-item{flex:1;padding:0 16px}
 .summary-item:first-child{padding-left:0}
@@ -683,18 +686,21 @@ function renderPortfolio() {
     });
     var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
     html += '<div class="summary-card">' +
-      '<div class="summary-label">總投入成本</div>' +
-      '<div class="summary-main">'+fc(tc)+'</div>' +
+      '<div class="summary-top">' +
+        '<div>' +
+          '<div class="summary-label">總投入成本</div>' +
+          '<div class="summary-main">'+fc(tc)+'</div>' +
+        '</div>' +
+        '<div class="summary-top-right">' +
+          '<div class="summary-label">總賣出成本</div>' +
+          '<div class="summary-main-sm">'+fc(totalRealCost)+'</div>' +
+        '</div>' +
+      '</div>' +
       '<div class="summary-grid">' +
         '<div class="summary-item">' +
           '<div class="summary-item-label">未實現損益</div>' +
           '<div class="summary-item-value '+pcls(tu)+'">'+ps(tu)+fc(tu)+'</div>' +
           '<div class="summary-item-sub '+pcls(tuPct)+'">'+fp(tuPct)+'</div>' +
-        '</div>' +
-        '<div class="summary-sep"></div>' +
-        '<div class="summary-item">' +
-          '<div class="summary-item-label">總賣出成本</div>' +
-          '<div class="summary-item-value">'+fc(totalRealCost)+'</div>' +
         '</div>' +
         '<div class="summary-sep"></div>' +
         '<div class="summary-item">' +
