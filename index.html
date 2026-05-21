@@ -172,7 +172,7 @@ textarea.input{height:72px;resize:none}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent2);border-radius:50%;animation:spin 0.7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* ── Filter bar ── */
-.filter-bar{display:flex;gap:8px;padding:12px 0 4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.filter-bar{display:flex;gap:8px;padding:12px 0 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:8px}
 .sort-bar{display:flex;gap:8px;padding:6px 10px;align-items:center;flex-wrap:wrap;background:var(--bg2);border-radius:10px;margin-bottom:4px}
 .stock-select{background:var(--bg3);border:1.5px solid var(--border);border-radius:20px;padding:6px 32px 6px 14px;font-size:12px;font-weight:600;color:var(--text2);font-family:inherit;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%238899aa' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
 .edit-stock-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;line-height:1}
@@ -264,17 +264,17 @@ textarea.input{height:72px;resize:none}
   <!-- Charts Tab -->
   <div class="tab-content" id="tab-charts">
 
-    <div class="filter-bar" id="chart-filter-bar">
-      <button class="filter-btn active" data-chartfilter="all">全部</button>
-      <button class="filter-btn" data-chartfilter="holding">持有中</button>
-      <button class="filter-btn" data-chartfilter="sold">已出清</button>
-    </div>
     <div class="chart-tabs">
       <button class="chart-tab active" data-chart="allocation">資產配置</button>
       <button class="chart-tab" data-chart="pnl">損益比較</button>
       <button class="chart-tab" data-chart="dividend">股息統計</button>
       <button class="chart-tab" data-chart="return">報酬率</button>
       <button class="chart-tab" data-chart="bubble">泡泡圖</button>
+    </div>
+    <div class="filter-bar" id="chart-filter-bar">
+      <button class="filter-btn active" data-chartfilter="all">全部</button>
+      <button class="filter-btn" data-chartfilter="holding">持有中</button>
+      <button class="filter-btn" data-chartfilter="sold">已出清</button>
     </div>
     <div id="chart-area"></div>
   </div>
@@ -1016,7 +1016,7 @@ function renderBubble(tab) {
     bubbleData.push({
       x: tab==='pnl'?Math.round(s.unreal):Math.round(dayChangeMv),
       y: tab==='pnl'?parseFloat((s.unrPct*100).toFixed(2)):parseFloat((dayChangePct*100).toFixed(2)),
-      r: Math.max(8, Math.round(Math.sqrt(Math.max(s.mv,1))/16)),
+      r: Math.max(6, Math.min(40, Math.round(Math.log(Math.max(s.mv,1)+1)/1.2))),
       name:st.name, code:st.code, mv:s.mv,
       val:tab==='pnl'?s.unreal:dayChangeMv,
       pct:tab==='pnl'?s.unrPct*100:dayChangePct*100,
@@ -1055,17 +1055,39 @@ function renderBubble(tab) {
       scales:{
         x:{
           title:{display:true,text:xLabel,color:'#8899aa'},
-          ticks:{color:'#8899aa',callback:function(v){
+          min: function(){
+            if(!bubbleData.length) return -100;
+            var maxAbs=Math.max.apply(null,bubbleData.map(function(d){return Math.abs(d.x);}));
+            return -(maxAbs*1.3||100);
+          }(),
+          max: function(){
+            if(!bubbleData.length) return 100;
+            var maxAbs=Math.max.apply(null,bubbleData.map(function(d){return Math.abs(d.x);}));
+            return maxAbs*1.3||100;
+          }(),
+          ticks:{color:'#8899aa',maxTicksLimit:7,callback:function(v){
             var abs=Math.abs(v);
-            var str=abs>=10000?(abs/10000).toFixed(0)+'萬':abs.toLocaleString('zh-TW');
-            return (v>=0?'+':'-')+str;
+            var str=abs>=10000?(abs/10000).toFixed(0)+'萬':abs>=1000?(abs/1000).toFixed(0)+'K':abs.toString();
+            return (v>0?'+':v<0?'-':'')+str;
           }},
-          grid:{color:'#2a3d55'},border:{color:'#4a5d70'}
+          grid:{color:'#2a3d55',lineWidth:function(ctx){return ctx.tick.value===0?2:1;}},
+          border:{color:'#4a5d70'}
         },
         y:{
           title:{display:true,text:yLabel,color:'#8899aa'},
-          ticks:{color:'#8899aa',callback:function(v){return (v>=0?'+':'')+v+'%';}},
-          grid:{color:'#2a3d55'},border:{color:'#4a5d70'}
+          min: function(){
+            if(!bubbleData.length) return -10;
+            var maxAbs=Math.max.apply(null,bubbleData.map(function(d){return Math.abs(d.y);}));
+            return -(maxAbs*1.3||10);
+          }(),
+          max: function(){
+            if(!bubbleData.length) return 10;
+            var maxAbs=Math.max.apply(null,bubbleData.map(function(d){return Math.abs(d.y);}));
+            return maxAbs*1.3||10;
+          }(),
+          ticks:{color:'#8899aa',maxTicksLimit:7,callback:function(v){return (v>0?'+':'')+v+'%';}},
+          grid:{color:'#2a3d55',lineWidth:function(ctx){return ctx.tick.value===0?2:1;}},
+          border:{color:'#4a5d70'}
         }
       }
     },
@@ -1161,7 +1183,7 @@ function renderCharts() {
       if (curChartType==='pnl') {
         inst=new Chart(el,{type:'bar',data:{labels:labels,names:names,datasets:[{label:'未實現損益',data:unreals,backgroundColor:'rgba(61,142,240,0.7)',borderRadius:6},{label:'已實現損益',data:reals,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[idx]:'';return code?(this.chart.data.labels[idx]+'('+code+')'):(this.chart.data.labels[idx]);},label:function(ctx){return ctx.dataset.label+': $'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}});
       } else if (curChartType==='dividend') {
-        inst=new Chart(el,{type:'bar',data:{labels:names,codes:labels,datasets:[{label:'股息收入',data:divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}});
+        inst=new Chart(el,{type:'bar',data:{labels:labels,codes:names,datasets:[{label:'股息收入',data:divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}});
       } else if (curChartType==='return') {
         var bgc=retPcts.map(function(v){ return v>=0?'rgba(52,199,123,0.7)':'rgba(255,92,92,0.7)'; });
         inst=new Chart(el,{type:'bar',data:{labels:labels,names:names,datasets:[{label:'報酬率 %',data:retPcts,backgroundColor:bgc,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[idx]:'';return code?(this.chart.data.labels[idx]+'('+code+')'):(this.chart.data.labels[idx]);},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}});
