@@ -261,6 +261,7 @@ textarea.input{height:72px;resize:none}
       <button class="chart-tab" data-chart="pnl">損益比較</button>
       <button class="chart-tab" data-chart="dividend">股息統計</button>
       <button class="chart-tab" data-chart="return">報酬率</button>
+      <button class="chart-tab" data-chart="bubble">泡泡圖</button>
     </div>
     <div id="chart-area"></div>
   </div>
@@ -316,6 +317,10 @@ textarea.input{height:72px;resize:none}
       <div style="flex:1">
         <div style="font-size:20px;font-weight:800" id="d-code"></div>
         <div style="font-size:13px;color:var(--text2)" id="d-name"></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:20px;font-weight:800" id="d-price"></div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.5)" id="d-price-time"></div>
       </div>
       <button class="btn-icon" id="btn-add-tx">＋ 新增</button>
     </div>
@@ -840,12 +845,31 @@ function showDetail(sid) {
   var st = stocks.find(function(s){ return s.id===sid; });
   document.getElementById('d-code').textContent = st.code;
   document.getElementById('d-name').textContent = st.name + ' · ' + st.market;
+  updateDetailHeaderPrice(sid);
   document.getElementById('detail-overlay').classList.add('open');
   renderDetail();
 }
 function closeDetail() {
   document.getElementById('detail-overlay').classList.remove('open');
   renderPortfolio();
+}
+
+function updateDetailHeaderPrice(sid) {
+  var pr = getPrice(sid);
+  var s = calc(sid, pr);
+  var priceEl = document.getElementById('d-price');
+  var timeEl = document.getElementById('d-price-time');
+  if (!priceEl) return;
+  if (pr > 0) {
+    priceEl.textContent = fn(pr, 2);
+    priceEl.style.color = pr > 0 ? (s.unreal >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text2)';
+    var cache = priceCache[sid];
+    timeEl.textContent = cache ? fmtAt(cache.at) : '';
+  } else {
+    priceEl.textContent = '—';
+    priceEl.style.color = 'var(--text2)';
+    timeEl.textContent = '';
+  }
 }
 
 function renderDetail() {
@@ -871,7 +895,7 @@ function renderDetail() {
   });
 
   var html='<div class="info-card">' +
-    '<div class="info-row"><span class="info-label">現價</span><span class="info-value '+(pr>0?pcls(s.unreal):'muted')+'">'+(pr>0?fn(pr,2):'—')+'</span></div>' +
+
     '<div class="info-row"><span class="info-label">持有股數</span><span class="info-value">'+fn(s.cur)+' 股</span></div>' +
     '<div class="info-row"><span class="info-label">平均成本</span><span class="info-value">$'+fn(s.avg,2)+'</span></div>' +
     '<div class="info-row"><span class="info-label">總持倉成本</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
@@ -918,6 +942,7 @@ function renderDetail() {
     });
   }
   document.getElementById('d-content').innerHTML = html;
+  updateDetailHeaderPrice(curStockId);
 
   document.querySelectorAll('.tx-delete').forEach(function(btn){
     btn.addEventListener('click', function(){ onDeleteTx(sid, this.dataset.txid); });
