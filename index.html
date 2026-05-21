@@ -1364,8 +1364,9 @@ async function clearAllData() {
   if (!confirm('再次確認：所有標的和交易紀錄都會被刪除，確定嗎？')) return;
   var btn = document.getElementById('btn-clear-all');
   btn.textContent = '刪除中…'; btn.disabled = true;
-  for (var i=0; i<stocks.length; i++) {
-    await deleteStockDb(stocks[i].id);
+  var allIds = stocks.map(function(s){ return s.id; });
+  for (var i=0; i<allIds.length; i++) {
+    await deleteStockDb(allIds[i]);
   }
   stocks=[]; txns={}; priceCache={};
   btn.textContent = '清除全部資料'; btn.disabled = false;
