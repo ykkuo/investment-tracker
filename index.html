@@ -528,6 +528,7 @@ var curChartType = 'allocation';
 var curChartMarket = 'all';
 var curChartFilter = 'all';
 var chartSelectedIds = null; // null = all selected
+var portfolioSelectedIds = (function(){ try{ return JSON.parse(localStorage.getItem('pf_stockPicker')||'null'); }catch(e){ return null; } })();
 var curBubbleTab = 'pnl';
 var chartInstances = [];
 var importRows = [];
@@ -709,7 +710,32 @@ function normDate(d){ return d?String(d).replace(/\//g,'-'):'' ; }
 // ── Portfolio ──────────────────────────────────────────────
 function getPrice(sid){ return priceCache[sid]?.price || 0; }
 
+function buildPortfolioPicker() {
+  var list = document.getElementById('pf-picker-list');
+  if (!list) return;
+  list.innerHTML = '';
+  stocks.forEach(function(st){
+    var checked = portfolioSelectedIds===null || portfolioSelectedIds.indexOf(st.id)!==-1;
+    var item = document.createElement('label');
+    item.className = 'chart-picker-item';
+    item.innerHTML = '<input type="checkbox" value="'+st.id+'"'+(checked?' checked':'')+'>'+st.name+'<span style="color:var(--text2);font-size:11px;margin-left:auto">'+st.code+'</span>';
+    item.querySelector('input').addEventListener('change', function(){
+      var allInputs = document.querySelectorAll('#pf-picker-list input');
+      var checked2 = Array.prototype.filter.call(allInputs, function(i){ return i.checked; }).map(function(i){ return i.value; });
+      portfolioSelectedIds = checked2.length === stocks.length ? null : checked2;
+      localStorage.setItem('pf_stockPicker', JSON.stringify(portfolioSelectedIds));
+      renderPortfolio();
+    });
+    list.appendChild(item);
+  });
+  var countEl = document.getElementById('pf-picker-count');
+  if (countEl) countEl.textContent = portfolioSelectedIds===null ? '全部' : portfolioSelectedIds.length+'/'+stocks.length;
+  var btn = document.getElementById('pf-picker-toggle');
+  if (btn) btn.classList.toggle('active', portfolioSelectedIds!==null);
+}
+
 function renderPortfolio() {
+  buildPortfolioPicker();
   var sums={};
   stocks.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
@@ -771,11 +797,20 @@ function renderPortfolio() {
 
     // Filter bar
     var sortIcon = sortDir==='asc' ? '↑' : '↓';
-    html += '<div class="filter-bar">' +
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+    '<div class="filter-bar" style="margin-bottom:0;padding:6px 0">' +
       '<button class="filter-btn'+(showFilter==='holding'?' active':'')+'" data-filter="holding" data-type="holding">持有中</button>' +
       '<button class="filter-btn'+(showFilter==='sold'?' active':'')+'" data-filter="sold" data-type="holding">已出清</button>' +
       '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all" data-type="holding">全部</button>' +
-    '</div>';
+    '</div>' +
+    '<div class="chart-stock-picker" id="pf-stock-picker">' +
+      '<button class="chart-picker-btn'+(portfolioSelectedIds!==null?' active':'')+'" id="pf-picker-toggle">標的 <span id="pf-picker-count">'+(portfolioSelectedIds===null?'全部':portfolioSelectedIds.length+'/'+stocks.length)+'</span> ▾</button>' +
+      '<div class="chart-picker-panel" id="pf-picker-panel">' +
+        '<div class="chart-picker-actions"><button id="pf-picker-all">全選</button><button id="pf-picker-none">清除</button></div>' +
+        '<div class="chart-picker-list" id="pf-picker-list"></div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
 
 
     html += '<div class="sort-bar">' +
@@ -881,6 +916,15 @@ function renderPortfolio() {
     localStorage.setItem('pf_sortBy',sortBy);
     renderPortfolio();
   });
+
+  // Portfolio stock picker
+  var pfToggle=document.getElementById('pf-picker-toggle');
+  var pfPanel=document.getElementById('pf-picker-panel');
+  if(pfToggle && pfPanel) pfToggle.addEventListener('click',function(e){ e.stopPropagation(); pfPanel.classList.toggle('open'); });
+  var pfAll=document.getElementById('pf-picker-all');
+  var pfNone=document.getElementById('pf-picker-none');
+  if(pfAll) pfAll.addEventListener('click',function(){ portfolioSelectedIds=null; localStorage.setItem('pf_stockPicker','null'); renderPortfolio(); });
+  if(pfNone) pfNone.addEventListener('click',function(){ portfolioSelectedIds=[]; localStorage.setItem('pf_stockPicker','[]'); renderPortfolio(); });
   document.querySelectorAll('[data-sortdir]').forEach(function(btn){
     btn.addEventListener('click',function(){
       sortDir=sortDir==='asc'?'desc':'asc';
@@ -1841,6 +1885,12 @@ document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
 });
 
 // Chart stock picker toggle
+document.addEventListener('click', function(e){
+  var pfPanel2 = document.getElementById('pf-picker-panel');
+  if(pfPanel2 && !pfPanel2.contains(e.target) && e.target!==document.getElementById('pf-picker-toggle')){
+    pfPanel2.classList.remove('open');
+  }
+});
 document.addEventListener('click', function(e){
   var panel = document.getElementById('chart-picker-panel');
   var toggle = document.getElementById('chart-picker-toggle');
