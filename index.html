@@ -125,6 +125,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .chart-tab{padding:7px 16px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0}
 .chart-tab.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
 .bubble-tabs{display:flex;gap:8px;margin-bottom:12px}
+.chart-stock-picker{position:relative}
+.chart-picker-btn{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.chart-picker-btn.active{border-color:var(--accent);color:var(--accent2);background:rgba(61,142,240,0.15)}
+.chart-picker-panel{display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:180px;max-width:260px;background:var(--bg2);border:1.5px solid var(--border);border-radius:12px;padding:10px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.chart-picker-panel.open{display:block}
+.chart-picker-actions{display:flex;gap:6px;margin-bottom:8px}
+.chart-picker-actions button{flex:1;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;font-family:inherit}
+.chart-picker-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto}
+.chart-picker-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text)}
+.chart-picker-item:hover{background:var(--bg3)}
+.chart-picker-item input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .bubble-tab{padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .bubble-tab.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
 .chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
@@ -178,8 +189,9 @@ textarea.input{height:72px;resize:none}
 .edit-stock-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px;line-height:1}
 .edit-stock-btn:active{color:var(--accent2)}
 .sort-label{font-size:11px;color:var(--text3);flex-shrink:0;font-weight:600}
-.sort-btn{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px}
-.sort-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
+.sort-select{background:var(--bg3);border:1.5px solid var(--border);border-radius:20px;padding:5px 28px 5px 12px;font-size:12px;font-weight:600;color:var(--text2);font-family:inherit;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%238899aa' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.sort-dir-btn{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+
 .filter-btn{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0}
 .filter-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
 /* ── Tx edit btn ── */
@@ -271,10 +283,24 @@ textarea.input{height:72px;resize:none}
       <button class="chart-tab" data-chart="return">報酬率</button>
       <button class="chart-tab" data-chart="bubble">泡泡圖</button>
     </div>
-    <div class="filter-bar" id="chart-filter-bar">
-      <button class="filter-btn active" data-chartfilter="all">全部</button>
-      <button class="filter-btn" data-chartfilter="holding">持有中</button>
-      <button class="filter-btn" data-chartfilter="sold">已出清</button>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
+      <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
+        <button class="filter-btn active" data-chartfilter="all">全部</button>
+        <button class="filter-btn" data-chartfilter="holding">持有中</button>
+        <button class="filter-btn" data-chartfilter="sold">已出清</button>
+      </div>
+      <div class="chart-stock-picker" id="chart-stock-picker">
+        <button class="chart-picker-btn" id="chart-picker-toggle">
+          標的 <span id="chart-picker-count">全部</span> ▾
+        </button>
+        <div class="chart-picker-panel" id="chart-picker-panel">
+          <div class="chart-picker-actions">
+            <button id="chart-picker-all">全選</button>
+            <button id="chart-picker-none">清除</button>
+          </div>
+          <div class="chart-picker-list" id="chart-picker-list"></div>
+        </div>
+      </div>
     </div>
     <div id="chart-area"></div>
   </div>
@@ -503,13 +529,14 @@ var curEditType = '買入';
 var curChartType = 'allocation';
 var curChartMarket = 'all';
 var curChartFilter = 'all';
+var chartSelectedIds = null; // null = all selected
 var curBubbleTab = 'pnl';
 var chartInstances = [];
 var importRows = [];
 var showFilter = 'holding'; // 'holding' | 'all'
 var showMarket = 'all'; // 'all' | '台股' | '美股' | '基金'
-var sortBy = 'code'; // 'code' | 'value' | 'totalReturn' | 'recent'
-var sortDir = 'asc'; // 'asc' | 'desc'
+var sortBy = localStorage.getItem('pf_sortBy')||'recent';
+var sortDir = localStorage.getItem('pf_sortDir')||'asc';
 var filterStock = 'all'; // 'all' | stock id
 var curEditTxId = null;
 
@@ -761,11 +788,13 @@ function renderPortfolio() {
     html += '<select class="stock-select" id="stock-filter-select">'+stockOptions+'</select>';
     html += '<div class="sort-bar">' +
       '<span class="sort-label">排序：</span>' +
-      '<button class="sort-btn'+(sortBy==='code'?' active':'')+'" data-sort="code">代號</button>' +
-      '<button class="sort-btn'+(sortBy==='value'?' active':'')+'" data-sort="value">市值</button>' +
-      '<button class="sort-btn'+(sortBy==='totalReturn'?' active':'')+'" data-sort="totalReturn">總報酬</button>' +
-      '<button class="sort-btn'+(sortBy==='recent'?' active':'')+'" data-sort="recent">最近交易</button>' +
-      '<button class="sort-btn" data-sortdir>' + sortIcon + (sortDir==='asc'?' 升冪':' 降冪') + '</button>' +
+      '<select class="sort-select" id="sort-by-select">' +
+        '<option value="recent"'+(sortBy==='recent'?' selected':'')+'>最近交易</option>' +
+        '<option value="code"'+(sortBy==='code'?' selected':'')+'>代號</option>' +
+        '<option value="value"'+(sortBy==='value'?' selected':'')+'>市值</option>' +
+        '<option value="totalReturn"'+(sortBy==='totalReturn'?' selected':'')+'>總報酬</option>' +
+      '</select>' +
+      '<button class="sort-dir-btn" data-sortdir>' + sortIcon + (sortDir==='asc'?' 升冪':' 降冪') + '</button>' +
     '</div>';
   }
 
@@ -855,11 +884,18 @@ function renderPortfolio() {
     btn.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); openEditStock(this.dataset.editStock); });
   });
   // market filter hidden
-  document.querySelectorAll('[data-sort]').forEach(function(btn){
-    btn.addEventListener('click', function(){ sortBy=this.dataset.sort; renderPortfolio(); });
+  var sortSel=document.getElementById('sort-by-select');
+  if(sortSel) sortSel.addEventListener('change',function(){
+    sortBy=this.value;
+    localStorage.setItem('pf_sortBy',sortBy);
+    renderPortfolio();
   });
   document.querySelectorAll('[data-sortdir]').forEach(function(btn){
-    btn.addEventListener('click', function(){ sortDir=sortDir==='asc'?'desc':'asc'; renderPortfolio(); });
+    btn.addEventListener('click',function(){
+      sortDir=sortDir==='asc'?'desc':'asc';
+      localStorage.setItem('pf_sortDir',sortDir);
+      renderPortfolio();
+    });
   });
   document.querySelectorAll('[data-pid]').forEach(function(inp){
     inp.addEventListener('click', function(e){ e.stopPropagation(); });
@@ -1115,6 +1151,56 @@ function renderBubble(tab) {
   chartInstances.push(inst);
 }
 
+function buildChartPicker() {
+  // Get the base-filtered stocks (without chartSelectedIds filter)
+  var baseStocks = stocks.filter(function(st){
+    if (curChartMarket!=='all' && st.market!==curChartMarket) return false;
+    var s=calc(st.id, getPrice(st.id));
+    if (curChartFilter==='holding' && s.cur<=0) return false;
+    if (curChartFilter==='sold' && s.cur>0) return false;
+    return true;
+  });
+
+  var list = document.getElementById('chart-picker-list');
+  var countEl = document.getElementById('chart-picker-count');
+  if (!list) return;
+
+  list.innerHTML = '';
+  baseStocks.forEach(function(st){
+    var checked = chartSelectedIds===null || chartSelectedIds.indexOf(st.id)!==-1;
+    var item = document.createElement('label');
+    item.className = 'chart-picker-item';
+    item.innerHTML = '<input type="checkbox" value="'+st.id+'"'+(checked?' checked':'')+'>'+st.name+'<span style="color:var(--text2);font-size:11px;margin-left:auto">'+st.code+'</span>';
+    item.querySelector('input').addEventListener('change', function(){
+      var allInputs = document.querySelectorAll('#chart-picker-list input');
+      var checked2 = Array.prototype.filter.call(allInputs, function(i){return i.checked;}).map(function(i){return i.value;});
+      if (checked2.length === baseStocks.length) {
+        chartSelectedIds = null;
+      } else {
+        chartSelectedIds = checked2;
+      }
+      updatePickerCount(baseStocks);
+      renderCharts();
+    });
+    list.appendChild(item);
+  });
+
+  updatePickerCount(baseStocks);
+}
+
+function updatePickerCount(baseStocks) {
+  var countEl = document.getElementById('chart-picker-count');
+  var btn = document.getElementById('chart-picker-toggle');
+  if (!countEl) return;
+  if (chartSelectedIds === null || chartSelectedIds.length === baseStocks.length) {
+    countEl.textContent = '全部';
+    if (btn) btn.classList.remove('active');
+  } else {
+    countEl.textContent = chartSelectedIds.length + '/' + baseStocks.length;
+    if (btn) btn.classList.add('active');
+  }
+}
+
 function renderCharts() {
   chartInstances.forEach(function(c){ if(c) c.destroy(); });
   chartInstances=[];
@@ -1122,6 +1208,7 @@ function renderCharts() {
   document.querySelectorAll('[data-chartfilter]').forEach(function(b){
     b.classList.toggle('active', b.dataset.chartfilter===curChartFilter);
   });
+  buildChartPicker();
 
   if (stocks.length===0) {
     document.getElementById('chart-area').innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-msg">尚無資料</div></div>';
@@ -1134,6 +1221,7 @@ function renderCharts() {
     var s=calc(st.id, getPrice(st.id));
     if (curChartFilter==='holding' && s.cur<=0) return false;
     if (curChartFilter==='sold' && s.cur>0) return false;
+    if (chartSelectedIds!==null && chartSelectedIds.indexOf(st.id)===-1) return false;
     return true;
   });
   if (filteredStocks.length===0) {
@@ -1750,8 +1838,34 @@ document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
     document.querySelectorAll('[data-chartfilter]').forEach(function(b){ b.classList.remove('active'); });
     this.classList.add('active');
     curChartFilter=this.dataset.chartfilter;
+    chartSelectedIds=null;
     renderCharts();
   });
+});
+
+// Chart stock picker toggle
+document.addEventListener('click', function(e){
+  var panel = document.getElementById('chart-picker-panel');
+  var toggle = document.getElementById('chart-picker-toggle');
+  if (!panel) return;
+  if (toggle && toggle.contains(e.target)) {
+    panel.classList.toggle('open');
+  } else if (!panel.contains(e.target)) {
+    panel.classList.remove('open');
+  }
+});
+document.addEventListener('click', function(e){
+  var allBtn = document.getElementById('chart-picker-all');
+  var noneBtn = document.getElementById('chart-picker-none');
+  if (allBtn && e.target === allBtn) {
+    chartSelectedIds = null;
+    renderCharts();
+  }
+  if (noneBtn && e.target === noneBtn) {
+    document.querySelectorAll('#chart-picker-list input').forEach(function(i){ i.checked=false; });
+    chartSelectedIds = [];
+    renderCharts();
+  }
 });
 
 document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
