@@ -1370,7 +1370,7 @@ function renderCharts() {
     document.getElementById('chart-area').innerHTML=html;
         var allocPalette=['#3d8ef0','#5aa3ff','#2d6ebf','#1a4f8a','#7ab8f5','#0f3460','#4a90d9','#6baed6','#2171b5','#084594'];
     var allocColors=filteredStocks.map(function(_,i){return allocPalette[i%allocPalette.length];});
-    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'doughnut',data:{labels:names,codes:labels,datasets:[{data:values,backgroundColor:allocColors,borderWidth:2,borderColor:'#1a2840'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){var data=ctx.dataset.data||[];var total=data.reduce(function(a,b){return a+b;},0);var v=ctx.parsed||0;var pct=total?((v/total)*100).toFixed(1):'0.0';return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';}}}}}}));
+    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'doughnut',data:{labels:names,codes:labels,datasets:[{data:costs,backgroundColor:allocColors,borderWidth:2,borderColor:'#1a2840'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){var data=ctx.dataset.data||[];var total=data.reduce(function(a,b){return a+b;},0);var v=ctx.parsed||0;var pct=total?((v/total)*100).toFixed(1):'0.0';return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';}}}}}}));
   } else if (curChartType==='pnl') {
     html='<div class="chart-wrap"><div class="chart-title">損益比較</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
@@ -1386,7 +1386,7 @@ function renderCharts() {
     chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:names,codes:labels,datasets:[{label:'報酬率 %',data:retPcts,backgroundColor:bgColors,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}}));
     } else if (curChartType==='bubble') {
     var html='<div class="chart-wrap">'+
-      '<div class="chart-title">持倉泡泡圖</div>'+
+      '<div class="chart-title">持倉泡泡圖（限持有中標的）</div>'+
       '<div class="bubble-tabs">'+
         '<button class="bubble-tab'+(curBubbleTab==='pnl'?' active':'')+'" data-bubtab="pnl">累積損益</button>'+
         '<button class="bubble-tab'+(curBubbleTab==='day'?' active':'')+'" data-bubtab="day">單日變動</button>'+
