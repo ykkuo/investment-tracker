@@ -777,12 +777,7 @@ function renderPortfolio() {
       '<button class="filter-btn'+(showFilter==='all'?' active':'')+'" data-filter="all" data-type="holding">全部</button>' +
     '</div>';
 
-    // Build stock dropdown options
-    var stockOptions='<option value="all">全部標的</option>';
-    stocks.forEach(function(st){
-      stockOptions+='<option value="'+st.id+'"'+(filterStock===st.id?' selected':'')+'>'+st.code+' '+st.name+'</option>';
-    });
-    html += '<select class="stock-select" id="stock-filter-select">'+stockOptions+'</select>';
+
     html += '<div class="sort-bar">' +
       '<span class="sort-label">排序：</span>' +
       '<select class="sort-select" id="sort-by-select">' +
@@ -875,8 +870,7 @@ function renderPortfolio() {
   document.querySelectorAll('[data-filter]').forEach(function(btn){
     btn.addEventListener('click', function(){ showFilter=this.dataset.filter; renderPortfolio(); });
   });
-  var sel=document.getElementById('stock-filter-select');
-  if(sel) sel.addEventListener('change', function(){ filterStock=this.value; renderPortfolio(); });
+  
   document.querySelectorAll('[data-edit-stock]').forEach(function(btn){
     btn.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); openEditStock(this.dataset.editStock); });
   });
