@@ -224,15 +224,23 @@ textarea.input{height:72px;resize:none}
   }
 
   
-.wl-table { width:100%; border-collapse:collapse; font-size:var(--text-sm,0.875rem); }
-.wl-table thead tr { background:var(--color-surface-2,#22262e); }
-.wl-table th { padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
-.wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; }
-.wl-table tbody tr:hover { background:rgba(255,255,255,0.03); }
-.wl-table tbody tr:last-child td { border-bottom:none; }
-.code-badge { background:var(--color-surface-2,#22262e); border:1px solid var(--border,#2a3d55); border-radius:4px; padding:2px 7px; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; }
+.wl-scroll-wrap { overflow-x:auto; padding-bottom:16px; }
+.wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
+.wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
+.wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; background:#131c2e; }
+.wl-table tbody tr:hover td { background:#1a2840; }
+.wl-sticky { position:sticky; z-index:1; background:#131c2e; }
+.wl-table thead .wl-sticky { z-index:3; background:#1a2840; }
+.wl-table tbody tr:hover .wl-sticky { background:#1a2840; }
+.wl-col-code { left:0; min-width:72px; }
+.wl-col-name { left:72px; min-width:100px; border-right:1px solid var(--border,#2a3d55); }
+.wl-total-row td { font-weight:700; border-top:2px solid var(--border,#2a3d55); border-bottom:none; background:#1a2840; }
+.wl-total-row .wl-sticky { background:#1a2840; }
+.code-badge { background:rgba(255,255,255,0.06); border:1px solid var(--border,#2a3d55); border-radius:4px; padding:2px 7px; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; }
 @media(max-width:640px){
-  .wl-table th, .wl-table td { padding:8px 8px; font-size:0.78rem; }
+  .wl-table thead th, .wl-table td { padding:8px 8px; font-size:0.78rem; }
+  .wl-col-name { left:64px; min-width:80px; }
+  .wl-col-code { min-width:64px; }
 }
 </style>
 </head>
@@ -357,10 +365,8 @@ textarea.input{height:72px;resize:none}
   </div>
 </div>
 
-
 <!-- Watchlist Tab -->
 <div class="tab-content" id="tab-watchlist"></div>
-
 <!-- ══ DETAIL OVERLAY ══ -->
 <div id="detail-overlay">
   <div class="detail-header">
@@ -2016,19 +2022,30 @@ function renderWatchlist() {
     return '<span class="' + cls + '">' + (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%</span>';
   }
 
-  var html = '<div style="overflow-x:auto;padding:0 0 var(--space-4,16px)">' +
+  // Totals
+  var totalDayPnl = null, totalUnreal = 0;
+  rows.forEach(function(r){
+    if (r.dayPnl !== null) { totalDayPnl = (totalDayPnl||0) + r.dayPnl; }
+    totalUnreal += r.s.unreal;
+  });
+
+  var html = '<div class="wl-scroll-wrap">' +
     '<table class="wl-table">' +
     '<thead><tr>' +
-    '<th>代號</th><th>標的名稱</th><th style="text-align:right">股數</th>' +
+    '<th class="wl-sticky wl-col-code">代號</th>' +
+    '<th class="wl-sticky wl-col-name">標的名稱</th>' +
+    '<th style="text-align:right">股數</th>' +
     '<th style="text-align:right">現價</th>' +
-    '<th style="text-align:right">今日損益</th><th style="text-align:right">今日(%)</th>' +
-    '<th style="text-align:right">總損益</th><th style="text-align:right">總損益(%)</th>' +
+    '<th style="text-align:right">今日損益</th>' +
+    '<th style="text-align:right">今日(%)</th>' +
+    '<th style="text-align:right">總損益</th>' +
+    '<th style="text-align:right">總損益(%)</th>' +
     '</tr></thead><tbody>';
 
   rows.forEach(function(r) {
     html += '<tr>' +
-      '<td><span class="code-badge">' + r.st.code + '</span></td>' +
-      '<td>' + r.st.name + '</td>' +
+      '<td class="wl-sticky wl-col-code"><span class="code-badge">' + r.st.code + '</span></td>' +
+      '<td class="wl-sticky wl-col-name">' + r.st.name + '</td>' +
       '<td style="text-align:right">' + fn(r.s.cur) + '</td>' +
       '<td style="text-align:right">$' + fn(r.pr, 2) + '</td>' +
       '<td style="text-align:right">' + fmtPnl(r.dayPnl) + '</td>' +
@@ -2037,6 +2054,21 @@ function renderWatchlist() {
       '<td style="text-align:right">' + fmtPct(r.s.unrPct) + '</td>' +
       '</tr>';
   });
+
+  // Total row
+  var totalUnrPct = null;
+  var totalCost = rows.reduce(function(a,r){ return a + (r.s.cost||0); }, 0);
+  if (totalCost > 0) totalUnrPct = totalUnreal / totalCost;
+  html += '<tr class="wl-total-row">' +
+    '<td class="wl-sticky wl-col-code" style="font-weight:700">合計</td>' +
+    '<td class="wl-sticky wl-col-name"></td>' +
+    '<td></td><td></td>' +
+    '<td style="text-align:right">' + fmtPnl(totalDayPnl) + '</td>' +
+    '<td></td>' +
+    '<td style="text-align:right">' + fmtPnl(totalUnreal) + '</td>' +
+    '<td style="text-align:right">' + fmtPct(totalUnrPct) + '</td>' +
+    '</tr>';
+
   html += '</tbody></table></div>';
   el.innerHTML = html;
 }
