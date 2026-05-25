@@ -224,6 +224,7 @@ textarea.input{height:72px;resize:none}
   }
 
   
+#tab-watchlist { padding:0; }
 .wl-scroll-wrap { overflow-x:auto; padding-bottom:16px; }
 .wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
 .wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
@@ -2036,6 +2037,8 @@ function renderWatchlist() {
     '<th class="wl-sticky wl-col-name">標的名稱</th>' +
     '<th style="text-align:right">股數</th>' +
     '<th style="text-align:right">現價</th>' +
+    '<th style="text-align:right">成本</th>' +
+    '<th style="text-align:right">市值</th>' +
     '<th style="text-align:right">今日損益</th>' +
     '<th style="text-align:right">今日(%)</th>' +
     '<th style="text-align:right">總損益</th>' +
@@ -2048,6 +2051,8 @@ function renderWatchlist() {
       '<td class="wl-sticky wl-col-name">' + r.st.name + '</td>' +
       '<td style="text-align:right">' + fn(r.s.cur) + '</td>' +
       '<td style="text-align:right">$' + fn(r.pr, 2) + '</td>' +
+      '<td style="text-align:right">$' + fn(Math.round(r.s.cost)) + '</td>' +
+      '<td style="text-align:right">$' + fn(Math.round(r.s.mv)) + '</td>' +
       '<td style="text-align:right">' + fmtPnl(r.dayPnl) + '</td>' +
       '<td style="text-align:right">' + fmtPct(r.dayPct) + '</td>' +
       '<td style="text-align:right">' + fmtPnl(r.s.unreal) + '</td>' +
@@ -2062,6 +2067,7 @@ function renderWatchlist() {
   html += '<tr class="wl-total-row">' +
     '<td class="wl-sticky wl-col-code" style="font-weight:700">合計</td>' +
     '<td class="wl-sticky wl-col-name"></td>' +
+    '<td></td><td></td>' +
     '<td></td><td></td>' +
     '<td style="text-align:right">' + fmtPnl(totalDayPnl) + '</td>' +
     '<td></td>' +
