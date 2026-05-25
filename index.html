@@ -1983,6 +1983,64 @@ document.getElementById('btn-submit-edit-tx').addEventListener('click', submitEd
 document.getElementById('btn-cancel-edit-tx').addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
 
 // market tabs hidden
+
+// ── Watchlist ───────────────────────────────────────────────
+function renderWatchlist() {
+  var el = document.getElementById('tab-watchlist');
+  if (!el) return;
+  var holding = stocks.filter(function(st){
+    var s = calc(st.id, getPrice(st.id));
+    return s.cur > 0;
+  });
+  if (holding.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">尚無持倉</div></div>';
+    return;
+  }
+  var rows = holding.map(function(st) {
+    var pr = getPrice(st.id);
+    var s = calc(st.id, pr);
+    var pc = (priceCache[st.id] && priceCache[st.id].prevClose) ? priceCache[st.id].prevClose : 0;
+    var dayPnl = pc > 0 ? (pr - pc) * s.cur : null;
+    var dayPct = pc > 0 ? (pr - pc) / pc : null;
+    return { st: st, s: s, pr: pr, dayPnl: dayPnl, dayPct: dayPct };
+  });
+
+  function fmtPnl(v) {
+    if (v === null) return '<span class="mute">—</span>';
+    var cls = v > 0 ? 'green' : v < 0 ? 'red' : 'mute';
+    return '<span class="' + cls + '">' + (v >= 0 ? '+' : '') + '$' + fn(Math.round(v)) + '</span>';
+  }
+  function fmtPct(v) {
+    if (v === null) return '<span class="mute">—</span>';
+    var cls = v > 0 ? 'green' : v < 0 ? 'red' : 'mute';
+    return '<span class="' + cls + '">' + (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%</span>';
+  }
+
+  var html = '<div style="overflow-x:auto;padding:0 0 var(--space-4,16px)">' +
+    '<table class="wl-table">' +
+    '<thead><tr>' +
+    '<th>代號</th><th>標的名稱</th><th style="text-align:right">股數</th>' +
+    '<th style="text-align:right">現價</th>' +
+    '<th style="text-align:right">今日損益</th><th style="text-align:right">今日(%)</th>' +
+    '<th style="text-align:right">總損益</th><th style="text-align:right">總損益(%)</th>' +
+    '</tr></thead><tbody>';
+
+  rows.forEach(function(r) {
+    html += '<tr>' +
+      '<td><span class="code-badge">' + r.st.code + '</span></td>' +
+      '<td>' + r.st.name + '</td>' +
+      '<td style="text-align:right">' + fn(r.s.cur) + '</td>' +
+      '<td style="text-align:right">$' + fn(r.pr, 2) + '</td>' +
+      '<td style="text-align:right">' + fmtPnl(r.dayPnl) + '</td>' +
+      '<td style="text-align:right">' + fmtPct(r.dayPct) + '</td>' +
+      '<td style="text-align:right">' + fmtPnl(r.s.unreal) + '</td>' +
+      '<td style="text-align:right">' + fmtPct(r.s.unrPct) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
 </script>
 <!-- ══ EDIT STOCK MODAL ══ -->
 <div class="overlay" id="m-edit-stock">
