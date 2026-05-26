@@ -237,6 +237,12 @@ textarea.input{height:72px;resize:none}
 .wl-total-row td { font-weight:700; border-top:2px solid var(--border,#2a3d55); border-bottom:none; background:#1a2840; }
 .wl-total-row .wl-sticky { background:#1a2840; }
 .code-badge { background:rgba(255,255,255,0.06); border:1px solid var(--border,#2a3d55); border-radius:4px; padding:2px 7px; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; }
+.wl-toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border,#2a3d55); flex-wrap:wrap; background:#131c2e; }
+.wl-toolbar-label { font-size:0.78rem; color:var(--mute,#8899aa); white-space:nowrap; }
+.wl-col-picker { display:flex; flex-wrap:wrap; gap:6px; }
+.wl-col-toggle { display:flex; align-items:center; gap:4px; font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid var(--border,#2a3d55); color:var(--mute,#8899aa); cursor:pointer; user-select:none; transition:all 0.15s; }
+.wl-col-toggle input { display:none; }
+.wl-col-toggle.active { background:rgba(61,142,240,0.15); border-color:#3d8ef0; color:#3d8ef0; }
 @media(max-width:640px){
   .wl-table thead th, .wl-table td { padding:8px 8px; font-size:0.78rem; }
   .wl-col-name { left:64px; min-width:80px; }
@@ -366,7 +372,13 @@ textarea.input{height:72px;resize:none}
 </div>
 
 <!-- Watchlist Tab -->
-<div class="tab-content" id="tab-watchlist"></div>
+<div class="tab-content" id="tab-watchlist">
+  <div class="wl-toolbar">
+    <span class="wl-toolbar-label">顯示欄位</span>
+    <div id="wl-col-picker" class="wl-col-picker"></div>
+  </div>
+  <div id="wl-table-wrap"></div>
+</div>
 <!-- ══ DETAIL OVERLAY ══ -->
 <div id="detail-overlay">
   <div class="detail-header">
@@ -1991,15 +2003,46 @@ document.getElementById('btn-cancel-edit-tx').addEventListener('click', function
 // market tabs hidden
 
 // ── Watchlist ───────────────────────────────────────────────
+var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
+var WL_COL_DEFS = [
+  {key:'shares', label:'股數'},
+  {key:'price',  label:'現價'},
+  {key:'cost',   label:'成本'},
+  {key:'mv',     label:'市值'},
+  {key:'dayPnl', label:'今日損益'},
+  {key:'dayPct', label:'今日損益(%)'},
+  {key:'unreal', label:'總損益'},
+  {key:'unrPct', label:'總損益(%)'},
+];
+
+function buildWlColPicker() {
+  var wrap = document.getElementById('wl-col-picker');
+  if (!wrap) return;
+  wrap.innerHTML = WL_COL_DEFS.map(function(c){
+    return '<label class="wl-col-toggle' + (wlCols[c.key] ? ' active' : '') + '" data-col="' + c.key + '">' +
+      '<input type="checkbox"' + (wlCols[c.key] ? ' checked' : '') + '> ' + c.label + '</label>';
+  }).join('');
+  wrap.querySelectorAll('label').forEach(function(lbl){
+    lbl.addEventListener('click', function(){
+      var k = this.dataset.col;
+      wlCols[k] = !wlCols[k];
+      this.classList.toggle('active', wlCols[k]);
+      this.querySelector('input').checked = wlCols[k];
+      renderWatchlist();
+    });
+  });
+}
+
 function renderWatchlist() {
   var el = document.getElementById('tab-watchlist');
   if (!el) return;
+  buildWlColPicker();
   var holding = stocks.filter(function(st){
     var s = calc(st.id, getPrice(st.id));
     return s.cur > 0;
   });
   if (holding.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">尚無持倉</div></div>';
+    document.getElementById('wl-table-wrap').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">尚無持倉</div></div>';
     return;
   }
   var rows = holding.map(function(st) {
@@ -2008,7 +2051,7 @@ function renderWatchlist() {
     var pc = (priceCache[st.id] && priceCache[st.id].prevClose) ? priceCache[st.id].prevClose : 0;
     var dayPnl = pc > 0 ? (pr - pc) * s.cur : null;
     var dayPct = pc > 0 ? (pr - pc) / pc : null;
-    return { st: st, s: s, pr: pr, dayPnl: dayPnl, dayPct: dayPct };
+    return { st:st, s:s, pr:pr, dayPnl:dayPnl, dayPct:dayPct };
   });
 
   function fmtPnl(v) {
@@ -2022,60 +2065,47 @@ function renderWatchlist() {
     return '<span class="' + cls + '">' + (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%</span>';
   }
 
-  // Totals
   var totalDayPnl = null, totalUnreal = 0;
   rows.forEach(function(r){
     if (r.dayPnl !== null) { totalDayPnl = (totalDayPnl||0) + r.dayPnl; }
     totalUnreal += r.s.unreal;
   });
+  var totalCost = rows.reduce(function(a,r){ return a+(r.s.cost||0); }, 0);
+  var totalMv = rows.reduce(function(a,r){ return a+(r.s.mv||0); }, 0);
+  var totalUnrPct = totalCost > 0 ? totalUnreal / totalCost : null;
 
-  var html = '<div class="wl-scroll-wrap">' +
-    '<table class="wl-table">' +
-    '<thead><tr>' +
+  var colData = {
+    shares: { td: function(r){ return fn(r.s.cur); }, total: '' },
+    price:  { td: function(r){ return '$'+fn(r.pr,2); }, total: '' },
+    cost:   { td: function(r){ return '$'+fn(Math.round(r.s.cost)); }, total: '$'+fn(Math.round(totalCost)) },
+    mv:     { td: function(r){ return '$'+fn(Math.round(r.s.mv)); }, total: '$'+fn(Math.round(totalMv)) },
+    dayPnl: { td: function(r){ return fmtPnl(r.dayPnl); }, total: fmtPnl(totalDayPnl) },
+    dayPct: { td: function(r){ return fmtPct(r.dayPct); }, total: '' },
+    unreal: { td: function(r){ return fmtPnl(r.s.unreal); }, total: fmtPnl(totalUnreal) },
+    unrPct: { td: function(r){ return fmtPct(r.s.unrPct); }, total: fmtPct(totalUnrPct) },
+  };
+
+  var activeCols = WL_COL_DEFS.filter(function(c){ return wlCols[c.key]; });
+
+  var html = '<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>' +
     '<th class="wl-sticky wl-col-code">代號</th>' +
-    '<th class="wl-sticky wl-col-name">標的名稱</th>' +
-    '<th style="text-align:right">股數</th>' +
-    '<th style="text-align:right">現價</th>' +
-    '<th style="text-align:right">成本</th>' +
-    '<th style="text-align:right">市值</th>' +
-    '<th style="text-align:right">今日損益</th>' +
-    '<th style="text-align:right">今日損益(%)</th>' +
-    '<th style="text-align:right">總損益</th>' +
-    '<th style="text-align:right">總損益(%)</th>' +
-    '</tr></thead><tbody>';
+    '<th class="wl-sticky wl-col-name">標的名稱</th>';
+  activeCols.forEach(function(c){ html += '<th style="text-align:right">' + c.label + '</th>'; });
+  html += '</tr></thead><tbody>';
 
-  rows.forEach(function(r) {
-    html += '<tr>' +
-      '<td class="wl-sticky wl-col-code"><span class="code-badge">' + r.st.code + '</span></td>' +
-      '<td class="wl-sticky wl-col-name">' + r.st.name + '</td>' +
-      '<td style="text-align:right">' + fn(r.s.cur) + '</td>' +
-      '<td style="text-align:right">$' + fn(r.pr, 2) + '</td>' +
-      '<td style="text-align:right">$' + fn(Math.round(r.s.cost)) + '</td>' +
-      '<td style="text-align:right">$' + fn(Math.round(r.s.mv)) + '</td>' +
-      '<td style="text-align:right">' + fmtPnl(r.dayPnl) + '</td>' +
-      '<td style="text-align:right">' + fmtPct(r.dayPct) + '</td>' +
-      '<td style="text-align:right">' + fmtPnl(r.s.unreal) + '</td>' +
-      '<td style="text-align:right">' + fmtPct(r.s.unrPct) + '</td>' +
-      '</tr>';
+  rows.forEach(function(r){
+    html += '<tr><td class="wl-sticky wl-col-code"><span class="code-badge">' + r.st.code + '</span></td>' +
+      '<td class="wl-sticky wl-col-name">' + r.st.name + '</td>';
+    activeCols.forEach(function(c){ html += '<td style="text-align:right">' + colData[c.key].td(r) + '</td>'; });
+    html += '</tr>';
   });
 
   // Total row
-  var totalUnrPct = null;
-  var totalCost = rows.reduce(function(a,r){ return a + (r.s.cost||0); }, 0);
-  if (totalCost > 0) totalUnrPct = totalUnreal / totalCost;
-  html += '<tr class="wl-total-row">' +
-    '<td class="wl-sticky wl-col-code" style="font-weight:700">合計</td>' +
-    '<td class="wl-sticky wl-col-name"></td>' +
-    '<td></td><td></td>' +
-    '<td></td><td></td>' +
-    '<td style="text-align:right">' + fmtPnl(totalDayPnl) + '</td>' +
-    '<td></td>' +
-    '<td style="text-align:right">' + fmtPnl(totalUnreal) + '</td>' +
-    '<td style="text-align:right">' + fmtPct(totalUnrPct) + '</td>' +
-    '</tr>';
+  html += '<tr class="wl-total-row"><td class="wl-sticky wl-col-code" style="font-weight:700">合計</td><td class="wl-sticky wl-col-name"></td>';
+  activeCols.forEach(function(c){ html += '<td style="text-align:right">' + (colData[c.key].total||'') + '</td>'; });
+  html += '</tr></tbody></table></div>';
 
-  html += '</tbody></table></div>';
-  el.innerHTML = html;
+  document.getElementById('wl-table-wrap').innerHTML = html;
 }
 
 </script>
