@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v48</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v48g</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -2048,10 +2048,11 @@ function renderWatchlistTable() {
     if(r.dayPnl!==null) totalDayPnl=(totalDayPnl||0)+r.dayPnl;
   });
   var totalUnrPct = totalCost>0 ? totalUnreal/totalCost : null;
+  var totalDayPct = (totalDayPnl!==null && totalCost>0) ? totalDayPnl/totalCost : null;
   function fmtPnl(v){ if(v===null)return'<span class="muted">—</span>'; var c=v>0?'green':v<0?'red':'muted'; return'<span class="'+c+'">'+(v>=0?'+':'')+'$'+fn(Math.round(v))+'</span>'; }
   function fmtPct(v){ if(v===null)return'<span class="muted">—</span>'; var c=v>0?'green':v<0?'red':'muted'; return'<span class="'+c+'">'+(v>=0?'+':'')+(v*100).toFixed(2)+'%</span>'; }
   var active = WL_COL_DEFS.filter(function(c){ return wlCols[c.key]; });
-  var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:'',unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct)};
+  var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:fmtPct(totalDayPct),unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct)};
   var cellFn = {
     shares:function(r){return fn(r.s.cur);},
     price: function(r){return '$'+fn(r.pr,2);},
