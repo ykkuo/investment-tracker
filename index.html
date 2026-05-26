@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v48g</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v48h</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -567,6 +567,7 @@ var sortBy = localStorage.getItem('pf_sortBy')||'recent';
 var sortDir = localStorage.getItem('pf_sortDir')||'asc';
 var curEditTxId = null;
 
+var pfPickerOpen = false;
 var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
 var WL_COL_DEFS = [
   {key:'shares', label:'股數'},
@@ -765,6 +766,7 @@ function buildPortfolioPicker() {
       var checked2 = Array.prototype.filter.call(allInputs, function(i){ return i.checked; }).map(function(i){ return i.value; });
       portfolioSelectedIds = checked2.length === stocks.length ? null : checked2;
       localStorage.setItem('pf_stockPicker', JSON.stringify(portfolioSelectedIds));
+      pfPickerOpen = true;
       renderPortfolio();
     });
     list.appendChild(item);
@@ -773,6 +775,11 @@ function buildPortfolioPicker() {
   if (countEl) countEl.textContent = portfolioSelectedIds===null ? '全部' : portfolioSelectedIds.length+'/'+stocks.length;
   var btn = document.getElementById('pf-picker-toggle');
   if (btn) btn.classList.toggle('active', portfolioSelectedIds!==null);
+  if (pfPickerOpen) {
+    var panel = document.getElementById('pf-picker-panel');
+    if (panel) panel.classList.add('open');
+    pfPickerOpen = false;
+  }
 }
 
 function renderPortfolio() {
@@ -1885,12 +1892,12 @@ function switchTab(tab) {
 }
 
 // ── Auth ───────────────────────────────────────────────────
-document.getElementById('btn-google-login').addEventListener('click', function(){
+(document.getElementById('btn-google-login')||{addEventListener:function(){}} ).addEventListener('click', function(){
   var provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithPopup(provider).catch(function(e){ alert('登入失敗：'+e.message); });
 });
 
-document.getElementById('btn-signout').addEventListener('click', function(){
+(document.getElementById('btn-signout')||{addEventListener:function(){}} ).addEventListener('click', function(){
   auth.signOut();
 });
 
@@ -1921,15 +1928,15 @@ document.querySelectorAll('.tab-btn').forEach(function(btn){
   btn.addEventListener('click',function(){ switchTab(this.dataset.tab); });
 });
 
-document.getElementById('header-action-btn').addEventListener('click', openAddStock);
-document.getElementById('btn-submit-stock').addEventListener('click', submitAddStock);
-document.getElementById('btn-cancel-stock').addEventListener('click', function(){ document.getElementById('m-stock').classList.remove('open'); });
-document.getElementById('btn-back').addEventListener('click', closeDetail);
-document.getElementById('btn-add-tx').addEventListener('click', openAddTx);
-document.getElementById('btn-submit-tx').addEventListener('click', submitAddTx);
-document.getElementById('btn-cancel-tx').addEventListener('click', function(){ document.getElementById('m-tx').classList.remove('open'); });
-document.getElementById('f-shares').addEventListener('input', autoFee);
-document.getElementById('f-price').addEventListener('input', autoFee);
+(document.getElementById('header-action-btn')||{addEventListener:function(){}} ).addEventListener('click', openAddStock);
+(document.getElementById('btn-submit-stock')||{addEventListener:function(){}} ).addEventListener('click', submitAddStock);
+(document.getElementById('btn-cancel-stock')||{addEventListener:function(){}} ).addEventListener('click', function(){ document.getElementById('m-stock').classList.remove('open'); });
+(document.getElementById('btn-back')||{addEventListener:function(){}} ).addEventListener('click', closeDetail);
+(document.getElementById('btn-add-tx')||{addEventListener:function(){}} ).addEventListener('click', openAddTx);
+(document.getElementById('btn-submit-tx')||{addEventListener:function(){}} ).addEventListener('click', submitAddTx);
+(document.getElementById('btn-cancel-tx')||{addEventListener:function(){}} ).addEventListener('click', function(){ document.getElementById('m-tx').classList.remove('open'); });
+(document.getElementById('f-shares')||{addEventListener:function(){}} ).addEventListener('input', autoFee);
+(document.getElementById('f-price')||{addEventListener:function(){}} ).addEventListener('input', autoFee);
 
 document.querySelectorAll('.chart-tab').forEach(function(btn){
   btn.addEventListener('click',function(){
@@ -1990,7 +1997,7 @@ document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
   });
 });
 
-document.getElementById('file-input').addEventListener('change',function(e){
+(document.getElementById('file-input')||{addEventListener:function(){}} ).addEventListener('change',function(e){
   var file=e.target.files[0]; if(!file) return;
   var reader=new FileReader();
   reader.onload=function(ev){ showImportPreview(parseCSV(ev.target.result)); };
@@ -1998,15 +2005,15 @@ document.getElementById('file-input').addEventListener('change',function(e){
   this.value='';
 });
 
-document.getElementById('m-stock').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
-document.getElementById('m-edit-stock').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
-document.getElementById('m-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
-document.getElementById('m-edit-tx').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
-document.getElementById('btn-export-csv').addEventListener('click', exportTxCSV);
-document.getElementById('btn-clear-all').addEventListener('click', clearAllData);
-document.getElementById('btn-export-summary').addEventListener('click', exportSummaryCSV);
-document.getElementById('btn-submit-edit-tx').addEventListener('click', submitEditTx);
-document.getElementById('btn-cancel-edit-tx').addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
+(document.getElementById('m-stock')||{addEventListener:function(){}} ).addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
+(document.getElementById('m-edit-stock')||{addEventListener:function(){}} ).addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
+(document.getElementById('m-tx')||{addEventListener:function(){}} ).addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
+(document.getElementById('m-edit-tx')||{addEventListener:function(){}} ).addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
+(document.getElementById('btn-export-csv')||{addEventListener:function(){}} ).addEventListener('click', exportTxCSV);
+(document.getElementById('btn-clear-all')||{addEventListener:function(){}} ).addEventListener('click', clearAllData);
+(document.getElementById('btn-export-summary')||{addEventListener:function(){}} ).addEventListener('click', exportSummaryCSV);
+(document.getElementById('btn-submit-edit-tx')||{addEventListener:function(){}} ).addEventListener('click', submitEditTx);
+(document.getElementById('btn-cancel-edit-tx')||{addEventListener:function(){}} ).addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
 
 // market tabs hidden
 
