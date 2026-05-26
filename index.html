@@ -224,7 +224,7 @@ textarea.input{height:72px;resize:none}
   }
 
   
-.wl-scroll-wrap { overflow-x:auto; }
+.wl-scroll-wrap { overflow-x:auto; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
 .wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
 .wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
 .wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; background:#131c2e; }
@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v48</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v48g</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -566,6 +566,18 @@ var showMarket = 'all'; // 'all' | '台股' | '美股' | '基金'
 var sortBy = localStorage.getItem('pf_sortBy')||'recent';
 var sortDir = localStorage.getItem('pf_sortDir')||'asc';
 var curEditTxId = null;
+
+var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
+var WL_COL_DEFS = [
+  {key:'shares', label:'股數'},
+  {key:'price',  label:'現價'},
+  {key:'cost',   label:'成本'},
+  {key:'mv',     label:'市值'},
+  {key:'dayPnl', label:'今日損益'},
+  {key:'dayPct', label:'今日損益(%)'},
+  {key:'unreal', label:'總損益'},
+  {key:'unrPct', label:'總損益(%)'},
+];
 
 // ── Firebase helpers ───────────────────────────────────────
 function stocksRef() { return db.collection('users').doc(uid).collection('stocks'); }
@@ -1999,40 +2011,83 @@ document.getElementById('btn-cancel-edit-tx').addEventListener('click', function
 // market tabs hidden
 
 // ── Watchlist ───────────────────────────────────────────────
-var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
-var WL_COL_DEFS = [
-  {key:'shares', label:'股數'},
-  {key:'price',  label:'現價'},
-  {key:'cost',   label:'成本'},
-  {key:'mv',     label:'市值'},
-  {key:'dayPnl', label:'今日損益'},
-  {key:'dayPct', label:'今日損益(%)'},
-  {key:'unreal', label:'總損益'},
-  {key:'unrPct', label:'總損益(%)'},
-];
 
 function buildWlColPicker() {
   var wrap = document.getElementById('wl-col-picker');
-  if (!wrap) return;
+  if (!wrap || wrap.dataset.init) return;
+  wrap.dataset.init = '1';
   wrap.innerHTML = WL_COL_DEFS.map(function(c){
-    return '<label class="wl-col-toggle' + (wlCols[c.key] ? ' active' : '') + '" data-col="' + c.key + '">' +
-      '<input type="checkbox"' + (wlCols[c.key] ? ' checked' : '') + '> ' + c.label + '</label>';
+    return '<label class="wl-col-toggle' + (wlCols[c.key] ? ' active' : '') + '" data-col="' + c.key + '">' + c.label + '</label>';
   }).join('');
-  wrap.querySelectorAll('label').forEach(function(lbl){
-    lbl.addEventListener('click', function(){
-      var k = this.dataset.col;
-      wlCols[k] = !wlCols[k];
-      this.classList.toggle('active', wlCols[k]);
-      this.querySelector('input').checked = wlCols[k];
-      renderWatchlist();
-    });
+  wrap.addEventListener('click', function(e){
+    var lbl = e.target.closest('label[data-col]');
+    if (!lbl) return;
+    var k = lbl.dataset.col;
+    wlCols[k] = !wlCols[k];
+    lbl.classList.toggle('active', wlCols[k]);
+    renderWatchlistTable();
   });
 }
 
+function renderWatchlistTable() {
+  var wrap = document.getElementById('wl-table-wrap');
+  if (!wrap) return;
+  var holding = stocks.filter(function(st){ return calc(st.id, getPrice(st.id)).cur > 0; });
+  if (holding.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">尚無持倉</div></div>';
+    return;
+  }
+  var rows = holding.map(function(st){
+    var pr = getPrice(st.id), s = calc(st.id, pr);
+    var pc = priceCache[st.id] && priceCache[st.id].prevClose ? priceCache[st.id].prevClose : 0;
+    return {st:st, s:s, pr:pr, dayPnl:pc>0?(pr-pc)*s.cur:null, dayPct:pc>0?(pr-pc)/pc:null};
+  });
+  var totalCost=0, totalMv=0, totalUnreal=0, totalDayPnl=null;
+  rows.forEach(function(r){
+    totalCost+=r.s.cost||0; totalMv+=r.s.mv||0; totalUnreal+=r.s.unreal||0;
+    if(r.dayPnl!==null) totalDayPnl=(totalDayPnl||0)+r.dayPnl;
+  });
+  var totalUnrPct = totalCost>0 ? totalUnreal/totalCost : null;
+  var totalDayPct = (totalDayPnl!==null && totalCost>0) ? totalDayPnl/totalCost : null;
+  function fmtPnl(v){ if(v===null)return'<span class="muted">—</span>'; var c=v>0?'green':v<0?'red':'muted'; return'<span class="'+c+'">'+(v>=0?'+':'')+'$'+fn(Math.round(v))+'</span>'; }
+  function fmtPct(v){ if(v===null)return'<span class="muted">—</span>'; var c=v>0?'green':v<0?'red':'muted'; return'<span class="'+c+'">'+(v>=0?'+':'')+(v*100).toFixed(2)+'%</span>'; }
+  var active = WL_COL_DEFS.filter(function(c){ return wlCols[c.key]; });
+  var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:fmtPct(totalDayPct),unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct)};
+  var cellFn = {
+    shares:function(r){return fn(r.s.cur);},
+    price: function(r){return '$'+fn(r.pr,2);},
+    cost:  function(r){return '$'+fn(Math.round(r.s.cost));},
+    mv:    function(r){return '$'+fn(Math.round(r.s.mv));},
+    dayPnl:function(r){return fmtPnl(r.dayPnl);},
+    dayPct:function(r){return fmtPct(r.dayPct);},
+    unreal:function(r){return fmtPnl(r.s.unreal);},
+    unrPct:function(r){return fmtPct(r.s.unrPct);}
+  };
+  var h='<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>';
+  h+='<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
+  active.forEach(function(c){h+='<th style="text-align:right">'+c.label+'</th>';});
+  h+='</tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td class="wl-sticky wl-col-code"><span class="code-badge">'+r.st.code+'</span></td>';
+    h+='<td class="wl-sticky wl-col-name">'+r.st.name+'</td>';
+    active.forEach(function(c){h+='<td style="text-align:right">'+cellFn[c.key](r)+'</td>';});
+    h+='</tr>';
+  });
+  h+='<tr class="wl-total-row"><td class="wl-sticky wl-col-code" style="font-weight:700">合計</td><td class="wl-sticky wl-col-name"></td>';
+  active.forEach(function(c){h+='<td style="text-align:right">'+(totals[c.key]||'')+'</td>';});
+  h+='</tr></tbody></table></div>';
+  wrap.innerHTML = h;
+}
+
 function renderWatchlist() {
+  buildWlColPicker();
+  renderWatchlistTable();
+}
+
+function _renderWatchlistOLD() {
   var el = document.getElementById('tab-watchlist');
   if (!el) return;
-  buildWlColPicker();
+  try {
   var holding = stocks.filter(function(st){
     var s = calc(st.id, getPrice(st.id));
     return s.cur > 0;
@@ -2102,7 +2157,11 @@ function renderWatchlist() {
   html += '</tr></tbody></table></div>';
 
   document.getElementById('wl-table-wrap').innerHTML = html;
-}
+  } catch(e) {
+    var wrap = document.getElementById('wl-table-wrap');
+    if (wrap) wrap.innerHTML = '<div style="padding:16px;color:var(--red)">⚠️ 錯誤：' + e.message + '</div>';
+  }
+} // end _renderWatchlistOLD
 
 </script>
 <!-- ══ EDIT STOCK MODAL ══ -->
