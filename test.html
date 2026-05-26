@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49a</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49b</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -336,7 +336,7 @@ textarea.input{height:72px;resize:none}
     <div class="import-card">
       <div class="import-title">📋 CSV 匯入說明</div>
       <div class="import-desc">請將 Google Sheets 匯出為 CSV，欄位順序如下：</div>
-      <div class="code-block">日期,標的代號,標的名稱,市場,類型,股數,單價,總金額,備註
+      <div class="code-block">日期,標的代號,標的名稱,市場,類型,股數,單價,手續費,交易稅,賣出成本(每股),總金額,備註
 
 2024-01-15,2330,台積電,台股,買入,200,550,110000,
 2024-03-20,2330,台積電,台股,買入,800,580,464000,加碼
@@ -1467,17 +1467,39 @@ function renderCharts() {
 // ── Import ─────────────────────────────────────────────────
 function parseCSV(text) {
   var lines=text.trim().split('\n'), rows=[];
+  // 判斷是新格式(12欄含fee/tax/sellCost)或舊格式(8欄)
+  var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim();}) : [];
+  var isNewFmt = header.length >= 11 || header.indexOf('賣出成本(每股)') !== -1;
   for (var i=1;i<lines.length;i++) {
     var cols=lines[i].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
     if (cols.length<8||!cols[0]) continue;
-    rows.push({
-      date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
-      market:cols[3]||'台股', type:cols[4],
-      shares:cols[5]?parseFloat(cols[5]):null,
-      price:cols[6]?parseFloat(cols[6]):null,
-      total:parseFloat(cols[7])||0,
-      note:cols[8]||''
-    });
+    var row;
+    if (isNewFmt) {
+      // 新格式: 日期,代號,名稱,市場,類型,股數,單價,手續費,交易稅,賣出成本(每股),總金額,備註
+      var sc = cols[9] ? parseFloat(cols[9]) : null;
+      row = {
+        date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
+        market:cols[3]||'台股', type:cols[4],
+        shares:cols[5]?parseFloat(cols[5]):null,
+        price:cols[6]?parseFloat(cols[6]):null,
+        fee:cols[7]?parseFloat(cols[7]):0,
+        tax:cols[8]?parseFloat(cols[8]):0,
+        total:parseFloat(cols[10])||0,
+        note:cols[11]||''
+      };
+      if (sc !== null && !isNaN(sc) && sc > 0) row.sellCost = sc;
+    } else {
+      // 舊格式: 日期,代號,名稱,市場,類型,股數,單價,總金額,備註
+      row = {
+        date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
+        market:cols[3]||'台股', type:cols[4],
+        shares:cols[5]?parseFloat(cols[5]):null,
+        price:cols[6]?parseFloat(cols[6]):null,
+        total:parseFloat(cols[7])||0,
+        note:cols[8]||''
+      };
+    }
+    rows.push(row);
   }
   return rows;
 }
@@ -1826,12 +1848,14 @@ function downloadCSV(filename, rows) {
 }
 
 function exportTxCSV() {
-  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','總金額','備註']];
+  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註']];
   stocks.forEach(function(st){
     var list = (txns[st.id]||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
     list.forEach(function(tx){
       rows.push([tx.date, st.code, st.name, st.market, tx.type,
-        tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0, tx.total, tx.note||'']);
+        tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0,
+        (tx.type==='賣出' && tx.sellCost!=null) ? tx.sellCost : '',
+        tx.total, tx.note||'']);
     });
   });
   var today = new Date().toISOString().slice(0,10);
