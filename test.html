@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49d</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49e</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -536,6 +536,9 @@ textarea.input{height:72px;resize:none}
     <div class="sheet-title" style="margin-bottom:8px">📦 選擇賣出批次</div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:14px">指定從哪幾筆買入賣出，系統自動計算加權成本</div>
     <div id="lot-picker-list" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;margin-bottom:14px"></div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button type="button" id="btn-lot-fifo" style="background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;font-weight:600;padding:5px 14px;cursor:pointer;font-family:inherit">⚡ FIFO 自動填入</button>
+    </div>
     <div id="lot-picker-summary" style="background:var(--bg3);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
         <span style="color:var(--text2)">已分配</span>
@@ -2373,6 +2376,18 @@ function confirmLots() {
   document.getElementById('m-lot-picker').classList.remove('open');
 }
 
+function autoFillFIFO() {
+  var needShares = parseFloat(document.getElementById('f-shares').value) || 0;
+  var remaining = needShares;
+  pendingLots.forEach(function(l){ l.shares = 0; });
+  for (var i = 0; i < pendingLots.length && remaining > 0; i++) {
+    var fill = Math.min(pendingLots[i].available, remaining);
+    pendingLots[i].shares = fill;
+    remaining -= fill;
+  }
+  renderLotPicker(needShares);
+}
+
 // btn-open-lots: 使用 delegation，因為 modal 內容是動態的
 document.getElementById('m-tx').addEventListener('click', function(e){
   if (e.target && e.target.id === 'btn-open-lots') openLotPicker();
@@ -2381,6 +2396,7 @@ document.getElementById('btn-confirm-lots').addEventListener('click', confirmLot
 document.getElementById('btn-cancel-lots').addEventListener('click', function(){
   document.getElementById('m-lot-picker').classList.remove('open');
 });
+document.getElementById('btn-lot-fifo').addEventListener('click', autoFillFIFO);
 document.getElementById('m-lot-picker').addEventListener('click', function(e){
   if (e.target === this) this.classList.remove('open');
 });
