@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49c</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49d</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -529,6 +529,32 @@ textarea.input{height:72px;resize:none}
   </div>
 </div>
 
+<!-- ══ LOT PICKER OVERLAY ══ -->
+<div class="overlay" id="m-lot-picker" style="z-index:250">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" style="margin-bottom:8px">📦 選擇賣出批次</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">指定從哪幾筆買入賣出，系統自動計算加權成本</div>
+    <div id="lot-picker-list" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;margin-bottom:14px"></div>
+    <div id="lot-picker-summary" style="background:var(--bg3);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--text2)">已分配</span>
+        <span id="lot-alloc-shares" style="font-weight:700">0 股</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--text2)">需賣出</span>
+        <span id="lot-need-shares" style="font-weight:700">— 股</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:var(--text2)">加權成本/股</span>
+        <span id="lot-weighted-cost" style="font-weight:700;color:var(--accent2)">—</span>
+      </div>
+    </div>
+    <div id="lot-picker-err" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;margin-bottom:8px"></div>
+    <button class="btn-primary c-blue" id="btn-confirm-lots">確認批次</button>
+    <button class="btn-ghost" id="btn-cancel-lots">取消</button>
+  </div>
+</div>
 <script>
 // ══════════════════════════════════════════════════════════
 // ⚙️  FIREBASE 設定 - 請替換成你的設定值
@@ -2379,31 +2405,5 @@ document.getElementById('m-lot-picker').addEventListener('click', function(e){
   </div>
 </div>
 
-<!-- ══ LOT PICKER OVERLAY ══ -->
-<div class="overlay" id="m-lot-picker" style="z-index:250">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title" style="margin-bottom:8px">📦 選擇賣出批次</div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">指定從哪幾筆買入賣出，系統自動計算加權成本</div>
-    <div id="lot-picker-list" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;margin-bottom:14px"></div>
-    <div id="lot-picker-summary" style="background:var(--bg3);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="color:var(--text2)">已分配</span>
-        <span id="lot-alloc-shares" style="font-weight:700">0 股</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="color:var(--text2)">需賣出</span>
-        <span id="lot-need-shares" style="font-weight:700">— 股</span>
-      </div>
-      <div style="display:flex;justify-content:space-between">
-        <span style="color:var(--text2)">加權成本/股</span>
-        <span id="lot-weighted-cost" style="font-weight:700;color:var(--accent2)">—</span>
-      </div>
-    </div>
-    <div id="lot-picker-err" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;margin-bottom:8px"></div>
-    <button class="btn-primary c-blue" id="btn-confirm-lots">確認批次</button>
-    <button class="btn-ghost" id="btn-cancel-lots">取消</button>
-  </div>
-</div>
 </body>
 </html>
