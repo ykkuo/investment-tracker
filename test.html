@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49e</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49f</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -814,6 +814,8 @@ function calc(sid, price) {
       real += +t.total - thisCost;
       realCost += thisCost;
       if(bs<0) bs=0; if(bc<0) bc=0;
+      // 股數歸零時把殘留成本計入已實現損益（修正費用誤差）
+      if(bs <= 0 && bc > 0.001) { real -= bc; bc = 0; }
     } else if (t.type==='股息') {
       div+=+t.total;
     }
