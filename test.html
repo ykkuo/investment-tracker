@@ -23,7 +23,7 @@
   --gold:#f0b429;--purple:#9b72f5;--purple-bg:rgba(155,114,245,0.12);
   --text:#e8f0fe;--text2:#8899aa;--text3:#556677;
 }
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 /* ── Login ── */
 #login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 24px;text-align:center}
 .login-icon{font-size:64px;margin-bottom:24px}
@@ -33,7 +33,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .btn-google:active{transform:scale(0.97)}
 .google-logo{width:22px;height:22px}
 /* ── App Shell ── */
-#app{display:none;flex-direction:column;height:100dvh;overflow:hidden}
+#app{display:none;flex-direction:column;min-height:100vh}
 #app.ready{display:flex}
 .header{background:var(--bg);border-bottom:1px solid var(--border);padding:52px 20px 0;position:sticky;top:0;z-index:100}
 .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -45,8 +45,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .tab-btn{flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;white-space:nowrap}
 .tab-btn.active{color:var(--accent2);border-bottom-color:var(--accent2)}
 /* ── Content ── */
-.tab-content{display:none;flex:1;overflow-y:auto;padding:16px;padding-bottom:32px;height:0}
-.tab-content.active{display:flex;flex-direction:column}
+.tab-content{display:none;flex:1;overflow-y:auto;padding:16px;padding-bottom:32px}
+.tab-content.active{display:block}
 /* ── Summary card ── */
 .summary-card{background:linear-gradient(135deg,#1a3a6b,#0f2244);border:1px solid #2d5299;border-radius:16px;padding:20px;margin-bottom:16px}
 .summary-label{font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1px;text-transform:uppercase}
@@ -224,9 +224,9 @@ textarea.input{height:72px;resize:none}
   }
 
   
-.wl-scroll-wrap { overflow-x:auto; overflow-y:visible; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
+.wl-scroll-wrap { overflow:auto; max-height:calc(100vh - 260px); -webkit-overflow-scrolling:touch; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
 .wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
-.wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:10; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
+.wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
 .wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; background:#131c2e; }
 .wl-table tbody tr:hover td { background:#1a2840; }
 .wl-sticky { position:sticky; z-index:1; background:#131c2e; }
@@ -234,8 +234,8 @@ textarea.input{height:72px;resize:none}
 .wl-table tbody tr:hover .wl-sticky { background:#1a2840; }
 .wl-col-code { left:0; min-width:72px; }
 .wl-col-name { left:72px; min-width:100px; border-right:1px solid var(--border,#2a3d55); }
-.wl-total-row td { font-weight:700; border-top:2px solid var(--border,#2a3d55); border-bottom:none; background:#1a2840; }
-.wl-total-row .wl-sticky { background:#1a2840; }
+.wl-total-row td { font-weight:700; border-top:2px solid var(--border,#2a3d55); border-bottom:none; background:#1a2840; position:sticky; bottom:0; z-index:2; }
+.wl-total-row .wl-sticky { background:#1a2840; z-index:3; }
 .code-badge { background:rgba(255,255,255,0.06); border:1px solid var(--border,#2a3d55); border-radius:4px; padding:2px 7px; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; }
 .wl-toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border,#2a3d55); flex-wrap:wrap; background:#131c2e; }
 .wl-toolbar-label { font-size:0.78rem; color:var(--mute,#8899aa); white-space:nowrap; }
@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49i</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
