@@ -224,21 +224,18 @@ textarea.input{height:72px;resize:none}
   }
 
   
-#wl-table-wrap { display:flex; flex-direction:column; overflow:hidden; min-height:60px; }
-.wl-header-wrap, .wl-footer-wrap { overflow:hidden; flex-shrink:0; }
-.wl-body-wrap { flex:1; overflow:auto; -webkit-overflow-scrolling:touch; }
-.wl-scroll-wrap { overflow-x:auto; }
-.wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); table-layout:fixed; }
-.wl-table th { background:#1a2840; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:2px solid var(--border,#2a3d55); text-align:left; }
+.wl-scroll-wrap { overflow:auto; max-height:calc(100vh - 260px); -webkit-overflow-scrolling:touch; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
+.wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
+.wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
 .wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; background:#131c2e; }
 .wl-table tbody tr:hover td { background:#1a2840; }
 .wl-sticky { position:sticky; z-index:1; background:#131c2e; }
-.wl-table th.wl-sticky { z-index:3; background:#1a2840; }
+.wl-table thead .wl-sticky { z-index:3; background:#1a2840; }
 .wl-table tbody tr:hover .wl-sticky { background:#1a2840; }
-.wl-col-code { left:0; min-width:72px; width:72px; }
+.wl-col-code { left:0; min-width:72px; }
 .wl-col-name { left:72px; min-width:100px; border-right:1px solid var(--border,#2a3d55); }
-.wl-footer-wrap .wl-table td { font-weight:700; border-top:2px solid var(--border,#2a3d55); border-bottom:none; background:#1a2840; }
-.wl-footer-wrap .wl-sticky { background:#1a2840; }
+.wl-total-row td { font-weight:700; border-top:2px solid var(--border,#2a3d55); border-bottom:none; background:#1a2840; position:sticky; bottom:0; z-index:2; box-shadow:0 -1px 0 var(--border,#2a3d55); }
+.wl-total-row .wl-sticky { background:#1a2840; z-index:3; }
 .code-badge { background:rgba(255,255,255,0.06); border:1px solid var(--border,#2a3d55); border-radius:4px; padding:2px 7px; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; }
 .wl-toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border,#2a3d55); flex-wrap:wrap; background:#131c2e; }
 .wl-toolbar-label { font-size:0.78rem; color:var(--mute,#8899aa); white-space:nowrap; }
@@ -287,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49j</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -2197,65 +2194,20 @@ function renderWatchlistTable() {
     unreal:function(r){return fmtPnl(r.s.unreal);},
     unrPct:function(r){return fmtPct(r.s.unrPct);}
   };
-
-  // ── 標頭 ──
-  var hHead = '<div class="wl-header-wrap"><div class="wl-scroll-wrap" id="wl-scroll-head"><table class="wl-table"><thead><tr>';
-  hHead += '<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
-  active.forEach(function(c){ hHead += '<th style="text-align:right">'+c.label+'</th>'; });
-  hHead += '</tr></thead></table></div></div>';
-
-  // ── tbody ──
-  var hBody = '<div class="wl-body-wrap"><div class="wl-scroll-wrap" id="wl-scroll-body"><table class="wl-table"><tbody>';
+  var h='<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>';
+  h+='<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
+  active.forEach(function(c){h+='<th style="text-align:right">'+c.label+'</th>';});
+  h+='</tr></thead><tbody>';
   rows.forEach(function(r){
-    hBody += '<tr><td class="wl-sticky wl-col-code"><span class="code-badge">'+r.st.code+'</span></td>';
-    hBody += '<td class="wl-sticky wl-col-name">'+r.st.name+'</td>';
-    active.forEach(function(c){ hBody += '<td style="text-align:right">'+cellFn[c.key](r)+'</td>'; });
-    hBody += '</tr>';
+    h+='<tr><td class="wl-sticky wl-col-code"><span class="code-badge">'+r.st.code+'</span></td>';
+    h+='<td class="wl-sticky wl-col-name">'+r.st.name+'</td>';
+    active.forEach(function(c){h+='<td style="text-align:right">'+cellFn[c.key](r)+'</td>';});
+    h+='</tr>';
   });
-  hBody += '</tbody></table></div></div>';
-
-  // ── 合計列 ──
-  var hFoot = '<div class="wl-footer-wrap"><div class="wl-scroll-wrap" id="wl-scroll-foot"><table class="wl-table"><tbody>';
-  hFoot += '<tr><td class="wl-sticky wl-col-code" style="font-weight:700">合計</td><td class="wl-sticky wl-col-name"></td>';
-  active.forEach(function(c){ hFoot += '<td style="text-align:right">'+(totals[c.key]||'')+'</td>'; });
-  hFoot += '</tr></tbody></table></div></div>';
-
-  wrap.innerHTML = hHead + hBody + hFoot;
-
-  // 同步欄寬 + 橫向捲動連動
-  requestAnimationFrame(syncWlColWidths);
-}
-
-function syncWlColWidths() {
-  var bodyWrap = document.getElementById('wl-scroll-body');
-  if (!bodyWrap) return;
-  var bodyTds = bodyWrap.querySelectorAll('tbody tr:first-child td');
-  if (!bodyTds.length) return;
-  var widths = Array.prototype.map.call(bodyTds, function(td){ return td.offsetWidth; });
-
-  ['wl-scroll-head','wl-scroll-foot'].forEach(function(id){
-    var wrap = document.getElementById(id);
-    if (!wrap) return;
-    var cells = wrap.querySelectorAll('tr:first-child th, tr:first-child td');
-    cells.forEach(function(cell, i){ if(widths[i]) cell.style.width = widths[i]+'px'; });
-  });
-
-  // 橫向捲動三個區塊同步
-  var head = document.getElementById('wl-scroll-head');
-  var body = document.getElementById('wl-scroll-body');
-  var foot = document.getElementById('wl-scroll-foot');
-  if (!head || !body || !foot) return;
-  var syncing = false;
-  function syncScroll(src, targets) {
-    src.addEventListener('scroll', function(){
-      if (syncing) return; syncing=true;
-      targets.forEach(function(t){ t.scrollLeft = src.scrollLeft; });
-      syncing=false;
-    });
-  }
-  syncScroll(body, [head, foot]);
-  syncScroll(head, [body, foot]);
-  syncScroll(foot, [body, head]);
+  h+='<tr class="wl-total-row"><td class="wl-sticky wl-col-code" style="font-weight:700">合計</td><td class="wl-sticky wl-col-name"></td>';
+  active.forEach(function(c){h+='<td style="text-align:right">'+(totals[c.key]||'')+'</td>';});
+  h+='</tr></tbody></table></div>';
+  wrap.innerHTML = h;
 }
 
 function renderWatchlist() {
