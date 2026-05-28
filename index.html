@@ -224,7 +224,7 @@ textarea.input{height:72px;resize:none}
   }
 
   
-.wl-scroll-wrap { overflow-x:auto; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
+.wl-scroll-wrap { overflow:auto; max-height:calc(100vh - 260px); -webkit-overflow-scrolling:touch; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
 .wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
 .wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
 .wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; background:#131c2e; }
@@ -284,7 +284,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49b</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -507,8 +507,11 @@ textarea.input{height:72px;resize:none}
       </div>
       <div class="field" id="f-sellcost-wrap" style="display:none">
         <label class="field-label">賣出成本（每股）</label>
-        <input class="input" id="f-sellcost" type="number" inputmode="decimal" placeholder="預設使用當時平均成本">
-        <div class="field-hint">留空則自動使用當時平均成本；可手動填入指定成本</div>
+        <input class="input" id="f-sellcost" type="number" inputmode="decimal" placeholder="留空則使用平均成本">
+        <div class="field-hint" style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+          <span style="color:var(--text3);font-size:11px">留空則自動使用當時均價</span>
+          <button type="button" id="btn-open-lots" style="background:var(--bg3);border:1.5px solid var(--accent);border-radius:8px;color:var(--accent2);font-size:12px;font-weight:600;padding:5px 14px;cursor:pointer;font-family:inherit">📦 從批次選擇</button>
+        </div>
       </div>
     </div>
     <div id="form-div-area" style="display:none">
@@ -526,6 +529,35 @@ textarea.input{height:72px;resize:none}
   </div>
 </div>
 
+<!-- ══ LOT PICKER OVERLAY ══ -->
+<div class="overlay" id="m-lot-picker" style="z-index:250">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" style="margin-bottom:8px">📦 選擇賣出批次</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">指定從哪幾筆買入賣出，系統自動計算加權成本</div>
+    <div id="lot-picker-list" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;margin-bottom:14px"></div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button type="button" id="btn-lot-fifo" style="background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;font-weight:600;padding:5px 14px;cursor:pointer;font-family:inherit">⚡ FIFO 自動填入</button>
+    </div>
+    <div id="lot-picker-summary" style="background:var(--bg3);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--text2)">已分配</span>
+        <span id="lot-alloc-shares" style="font-weight:700">0 股</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--text2)">需賣出</span>
+        <span id="lot-need-shares" style="font-weight:700">— 股</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:var(--text2)">加權成本/股</span>
+        <span id="lot-weighted-cost" style="font-weight:700;color:var(--accent2)">—</span>
+      </div>
+    </div>
+    <div id="lot-picker-err" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;margin-bottom:8px"></div>
+    <button class="btn-primary c-blue" id="btn-confirm-lots">確認批次</button>
+    <button class="btn-ghost" id="btn-cancel-lots">取消</button>
+  </div>
+</div>
 <script>
 // ══════════════════════════════════════════════════════════
 // ⚙️  FIREBASE 設定 - 請替換成你的設定值
@@ -704,6 +736,40 @@ async function fetchAllPrices() {
 }
 
 // ── Calc ───────────────────────────────────────────────────
+// ── getAvailableLots: 計算每筆買入批次的剩餘股數 ──────────────
+function getAvailableLots(sid) {
+  var list = txns[sid] || [];
+  var sorted = list.slice().sort(function(a,b){
+    var da=normDate(a.date), db=normDate(b.date);
+    if(da!==db) return da>db?1:-1;
+    return 0;
+  });
+  // 建立買入批次 lot: {id, date, shares, price, remaining}
+  var lots = [];
+  sorted.forEach(function(t) {
+    if (t.type==='買入'||t.type==='再投入') {
+      lots.push({ id:t.id, date:t.date, shares:+(t.shares||0), price:+(t.price||0), remaining:+(t.shares||0) });
+    } else if (t.type==='賣出') {
+      if (t.sellLots && t.sellLots.length) {
+        // 精確模式：依 sellLots 扣減
+        t.sellLots.forEach(function(sl) {
+          var lot = lots.find(function(l){ return l.id===sl.buyTxId; });
+          if (lot) lot.remaining = Math.max(0, lot.remaining - +(sl.shares||0));
+        });
+      } else {
+        // Fallback FIFO
+        var toSell = +(t.shares||0);
+        for (var i=0; i<lots.length && toSell>0; i++) {
+          var deduct = Math.min(lots[i].remaining, toSell);
+          lots[i].remaining -= deduct;
+          toSell -= deduct;
+        }
+      }
+    }
+  });
+  return lots.filter(function(l){ return l.remaining > 0; });
+}
+
 function calc(sid, price) {
   var list = txns[sid] || [];
   var sorted = list.slice().sort(function(a,b){
@@ -711,18 +777,45 @@ function calc(sid, price) {
     return da>db?1:da<db?-1:0;
   });
   var bs=0, bc=0, div=0, real=0, realCost=0;
+  // 建立 lot map for sellLots lookup
+  var lotMap = {};
   sorted.forEach(function(t) {
     if (t.type==='買入'||t.type==='再投入') {
+      var cps = +(t.shares||0)>0 ? +t.total / +(t.shares||0) : 0;
+      lotMap[t.id] = { costPerShare: cps };
       bs+=+(t.shares||0); bc+=+t.total;
     } else if (t.type==='賣出') {
-      var avgNow = bs>0 ? bc/bs : 0;
-      var costPerShare = (t.sellCost!=null&&+t.sellCost>0) ? +t.sellCost : avgNow;
       var sh = +(t.shares||0);
+      var avgNow = bs>0 ? bc/bs : 0;
+      var costPerShare;
+      if (t.sellLots && t.sellLots.length) {
+        // 精確模式：從 sellLots 算加權成本
+        var totalCostOfLots = 0, totalShsOfLots = 0;
+        t.sellLots.forEach(function(sl) {
+          var lot = lotMap[sl.buyTxId];
+          var cps = lot ? lot.costPerShare : avgNow;
+          totalCostOfLots += cps * +(sl.shares||0);
+          totalShsOfLots  += +(sl.shares||0);
+        });
+        costPerShare = totalShsOfLots>0 ? totalCostOfLots/totalShsOfLots : avgNow;
+        // 按 sellLots 精確扣減 bc
+        t.sellLots.forEach(function(sl) {
+          var lot = lotMap[sl.buyTxId];
+          var cps = lot ? lot.costPerShare : avgNow;
+          bc -= cps * +(sl.shares||0);
+        });
+        bs -= sh;
+      } else {
+        // Fallback：用 sellCost 或均價
+        costPerShare = (t.sellCost!=null&&+t.sellCost>0) ? +t.sellCost : avgNow;
+        bs -= sh; bc -= sh*costPerShare;
+      }
       var thisCost = sh*costPerShare;
       real += +t.total - thisCost;
-      realCost += thisCost; // accumulate cost basis of sold shares
-      bs -= sh; bc -= sh*costPerShare;  // 用 costPerShare（含自訂成本）扣減持倉成本
+      realCost += thisCost;
       if(bs<0) bs=0; if(bc<0) bc=0;
+      // 股數歸零時把殘留成本計入已實現損益（修正費用誤差）
+      if(bs <= 0 && bc > 0.001) { real -= bc; bc = 0; }
     } else if (t.type==='股息') {
       div+=+t.total;
     }
@@ -733,7 +826,7 @@ function calc(sid, price) {
   var unreal = mv-cost;
   var unrPct = cost>0 ? unreal/cost : 0;
   var retPct = cost>0 ? (real+div+(price>0?unreal:0))/cost : 0;
-  var realPct = realCost>0 ? real/realCost : 0; // realized return rate
+  var realPct = realCost>0 ? real/realCost : 0;
   return { cur:bs, avg:avg, cost:cost, div:div, real:real, realCost:realCost, realPct:realPct, unreal:unreal, unrPct:unrPct, retPct:retPct, mv:mv };
 }
 
@@ -1093,7 +1186,7 @@ function renderDetail() {
           '<div><div class="tx-detail-label">單價</div><div class="tx-detail-value">$'+fn(tx.price,2)+'</div></div>' +
           '<div><div class="tx-detail-label">'+(tx.type==='賣出'?'實收金額':'總成本')+'</div><div class="tx-detail-value">'+fc(tx.total)+'</div></div>' +
         '</div>' +
-        (tx.type==='賣出'&&tx.sellCost?'<div class="tx-fees">使用成本：$'+fn(tx.sellCost,2)+'/股</div>':'');
+        (tx.type==='賣出'&&tx.sellCost?'<div class="tx-fees">使用成本：$'+fn(tx.sellCost,2)+'/股'+(tx.sellLots&&tx.sellLots.length?' ✦ 批次指定（'+tx.sellLots.length+'筆）':'')+'</div>':'');
       }
       if (sellPnL) {
         html+='<div class="tx-pnl '+pbg(sellPnL.pnl)+'">' +
@@ -1488,6 +1581,8 @@ function parseCSV(text) {
         note:cols[11]||''
       };
       if (sc !== null && !isNaN(sc) && sc > 0) row.sellCost = sc;
+      var slRaw = cols[12] ? cols[12].trim() : '';
+      if (slRaw) { try { var sl=JSON.parse(slRaw); if(Array.isArray(sl)&&sl.length) row.sellLots=sl; } catch(e){} }
     } else {
       // 舊格式: 日期,代號,名稱,市場,類型,股數,單價,總金額,備註
       row = {
@@ -1696,6 +1791,10 @@ async function submitAddTx() {
   }
   var txData={type:curType,date,shares,price,fee,tax,total,note:document.getElementById('f-note').value.trim()};
   if (sellCost!==null) txData.sellCost=sellCost;
+  if (curType==='賣出' && window._pendingSellLots && window._pendingSellLots.length) {
+    txData.sellLots = window._pendingSellLots;
+    window._pendingSellLots = null;
+  }
   await addTxDb(curStockId,txData);
   document.getElementById('m-tx').classList.remove('open');
   renderDetail();
@@ -1848,14 +1947,15 @@ function downloadCSV(filename, rows) {
 }
 
 function exportTxCSV() {
-  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註']];
+  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)']];
   stocks.forEach(function(st){
     var list = (txns[st.id]||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
     list.forEach(function(tx){
       rows.push([tx.date, st.code, st.name, st.market, tx.type,
         tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0,
         (tx.type==='賣出' && tx.sellCost!=null) ? tx.sellCost : '',
-        tx.total, tx.note||'']);
+        tx.total, tx.note||'',
+        (tx.sellLots && tx.sellLots.length) ? JSON.stringify(tx.sellLots) : '']);
     });
   });
   var today = new Date().toISOString().slice(0,10);
@@ -2194,6 +2294,116 @@ function _renderWatchlistOLD() {
   }
 } // end _renderWatchlistOLD
 
+// ══ LOT PICKER ══════════════════════════════════════════════
+var pendingLots = []; // [{buyTxId, shares(input), price, date, available}]
+
+function openLotPicker() {
+  var needShares = parseFloat(document.getElementById('f-shares').value) || 0;
+  if (!needShares) { alert('請先填寫賣出股數'); return; }
+  var lots = getAvailableLots(curStockId);
+  if (!lots.length) { alert('目前沒有可用的買入批次'); return; }
+  pendingLots = lots.map(function(l){ return { buyTxId:l.id, date:l.date, price:l.price, available:l.remaining, shares:0 }; });
+  document.getElementById('lot-need-shares').textContent = needShares + ' 股';
+  renderLotPicker(needShares);
+  document.getElementById('m-lot-picker').classList.add('open');
+}
+
+function renderLotPicker(needShares) {
+  var list = document.getElementById('lot-picker-list');
+  list.innerHTML = pendingLots.map(function(l, i){
+    return '<div style="background:var(--bg3);border-radius:10px;padding:10px 12px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span style="font-size:13px;font-weight:700">' + l.date + '</span>' +
+        '<span style="font-size:12px;color:var(--text2)">@$' + fn(l.price,2) + '　可用 <b>' + fn(l.available) + '</b> 股</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<span style="font-size:12px;color:var(--text3);flex:1">賣出股數</span>' +
+        '<input type="number" inputmode="decimal" data-lot-idx="' + i + '" value="' + (l.shares||'') + '" placeholder="0"' +
+          ' style="background:var(--bg2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-weight:700;padding:6px 10px;width:110px;text-align:right;font-family:inherit">' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  list.querySelectorAll('input[data-lot-idx]').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      var idx = +this.dataset.lotIdx;
+      var val = parseFloat(this.value) || 0;
+      val = Math.min(val, pendingLots[idx].available);
+      if ((parseFloat(this.value)||0) > pendingLots[idx].available) this.value = pendingLots[idx].available;
+      pendingLots[idx].shares = val;
+      updateLotSummary(needShares);
+    });
+  });
+  updateLotSummary(needShares);
+}
+
+function updateLotSummary(needShares) {
+  var totalAlloc = pendingLots.reduce(function(s,l){ return s + (l.shares||0); }, 0);
+  var totalCost  = pendingLots.reduce(function(s,l){ return s + (l.shares||0)*l.price; }, 0);
+  var weighted   = totalAlloc > 0 ? totalCost / totalAlloc : 0;
+
+  document.getElementById('lot-alloc-shares').textContent = fn(totalAlloc) + ' 股';
+  document.getElementById('lot-weighted-cost').textContent = totalAlloc > 0 ? '$' + fn(weighted, 2) + ' / 股' : '—';
+
+  var diff = Math.round((totalAlloc - needShares) * 10000) / 10000;
+  var errEl = document.getElementById('lot-picker-err');
+  var confirmBtn = document.getElementById('btn-confirm-lots');
+  if (diff < 0) {
+    errEl.textContent = '⚠️ 還差 ' + fn(Math.abs(diff)) + ' 股未分配';
+    confirmBtn.disabled = true; confirmBtn.style.opacity = '0.5';
+  } else if (diff > 0) {
+    errEl.textContent = '⚠️ 超出 ' + fn(diff) + ' 股，請減少分配';
+    confirmBtn.disabled = true; confirmBtn.style.opacity = '0.5';
+  } else {
+    errEl.textContent = '';
+    confirmBtn.disabled = false; confirmBtn.style.opacity = '1';
+  }
+}
+
+function confirmLots() {
+  var needShares = parseFloat(document.getElementById('f-shares').value) || 0;
+  var totalAlloc = pendingLots.reduce(function(s,l){ return s+(l.shares||0); }, 0);
+  if (Math.abs(totalAlloc - needShares) > 0.0001) return;
+
+  // 計算加權成本填入 f-sellcost
+  var totalCost = pendingLots.reduce(function(s,l){ return s+(l.shares||0)*l.price; }, 0);
+  var weighted  = totalAlloc > 0 ? Math.round(totalCost / totalAlloc * 100) / 100 : 0;
+  document.getElementById('f-sellcost').value = weighted;
+
+  // 儲存選擇的批次供 submitAddTx 使用
+  window._pendingSellLots = pendingLots
+    .filter(function(l){ return l.shares > 0; })
+    .map(function(l){ return { buyTxId: l.buyTxId, shares: l.shares }; });
+
+  document.getElementById('m-lot-picker').classList.remove('open');
+}
+
+function autoFillFIFO() {
+  var needShares = parseFloat(document.getElementById('f-shares').value) || 0;
+  var remaining = needShares;
+  pendingLots.forEach(function(l){ l.shares = 0; });
+  for (var i = 0; i < pendingLots.length && remaining > 0; i++) {
+    var fill = Math.min(pendingLots[i].available, remaining);
+    pendingLots[i].shares = fill;
+    remaining -= fill;
+  }
+  renderLotPicker(needShares);
+}
+
+// btn-open-lots: 使用 delegation，因為 modal 內容是動態的
+document.getElementById('m-tx').addEventListener('click', function(e){
+  if (e.target && e.target.id === 'btn-open-lots') openLotPicker();
+});
+document.getElementById('btn-confirm-lots').addEventListener('click', confirmLots);
+document.getElementById('btn-cancel-lots').addEventListener('click', function(){
+  document.getElementById('m-lot-picker').classList.remove('open');
+});
+document.getElementById('btn-lot-fifo').addEventListener('click', autoFillFIFO);
+document.getElementById('m-lot-picker').addEventListener('click', function(e){
+  if (e.target === this) this.classList.remove('open');
+});
+// ══ END LOT PICKER ══════════════════════════════════════════
+
 </script>
 <!-- ══ EDIT STOCK MODAL ══ -->
 <div class="overlay" id="m-edit-stock">
@@ -2212,5 +2422,6 @@ function _renderWatchlistOLD() {
     <button class="btn-ghost" id="btn-cancel-edit-stock">取消</button>
   </div>
 </div>
+
 </body>
 </html>
