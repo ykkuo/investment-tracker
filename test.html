@@ -287,7 +287,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g5</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g6</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -616,11 +616,12 @@ var WL_COL_DEFS = [
 ];
 var wlVisibleRows = (function(){ var v=parseInt(localStorage.getItem('wl_visible_rows')||'',10); return (!isNaN(v)&&v>=3&&v<=30)?v:(window.innerWidth<=640?8:12); })();
 function applyWlTableHeight(){
-  var rowH = window.innerWidth<=640 ? 41 : 45;
-  var headH = window.innerWidth<=640 ? 42 : 46;
-  var footH = 46;
+  var rowH = window.innerWidth<=640 ? 52 : 56;
+  var headH = window.innerWidth<=640 ? 44 : 48;
+  var footH = 50;
   var h = headH + footH + (wlVisibleRows * rowH);
   document.documentElement.style.setProperty('--wl-table-max-height', h + 'px');
+  return h;
 }
 
 // ── Firebase helpers ───────────────────────────────────────
@@ -2230,6 +2231,16 @@ function renderWatchlist() {
     inp.value = wlVisibleRows;
     if(!inp.dataset.bound){
       inp.dataset.bound='1';
+      var onRowsInput = function(){
+        var v=parseInt(inp.value,10);
+        if(isNaN(v)) return;
+        v=Math.max(3, Math.min(30, v));
+        wlVisibleRows=v;
+        localStorage.setItem('wl_visible_rows', String(v));
+        applyWlTableHeight();
+        renderWatchlistTable();
+      };
+      inp.addEventListener('input', onRowsInput);
       inp.addEventListener('change', function(){
         var v=parseInt(this.value,10);
         if(isNaN(v)) v=window.innerWidth<=640?8:12;
@@ -2238,6 +2249,13 @@ function renderWatchlist() {
         wlVisibleRows=v;
         localStorage.setItem('wl_visible_rows', String(v));
         applyWlTableHeight();
+        renderWatchlistTable();
+      });
+      inp.addEventListener('blur', function(){
+        var v=parseInt(this.value,10);
+        if(isNaN(v)) v=window.innerWidth<=640?8:12;
+        v=Math.max(3, Math.min(30, v));
+        this.value=v;
       });
     }
   }
@@ -2431,6 +2449,7 @@ document.getElementById('m-lot-picker').addEventListener('click', function(e){
   if (e.target === this) this.classList.remove('open');
 });
 // ══ END LOT PICKER ══════════════════════════════════════════
+window.addEventListener('resize', function(){ applyWlTableHeight(); renderWatchlistTable(); });
 
 </script>
 <!-- ══ EDIT STOCK MODAL ══ -->
