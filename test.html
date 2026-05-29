@@ -224,7 +224,7 @@ textarea.input{height:72px;resize:none}
   }
 
   
-.wl-scroll-wrap { overflow:auto; max-height:calc(100vh - 260px); -webkit-overflow-scrolling:touch; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
+.wl-scroll-wrap { overflow:auto; max-height:var(--wl-table-max-height, calc(100vh - 260px)); -webkit-overflow-scrolling:touch; } #wl-table-wrap { min-height:60px; padding-bottom:32px; }
 .wl-table { width:100%; border-collapse:separate; border-spacing:0; font-size:var(--text-sm,0.875rem); }
 .wl-table thead th { position:sticky; top:0; background:#1a2840; z-index:2; padding:10px 12px; color:var(--mute,#8899aa); font-weight:600; white-space:nowrap; border-bottom:1px solid var(--border,#2a3d55); }
 .wl-table td { padding:10px 12px; border-bottom:1px solid var(--border,#2a3d55); white-space:nowrap; font-variant-numeric:tabular-nums; background:#131c2e; }
@@ -240,6 +240,8 @@ textarea.input{height:72px;resize:none}
 .wl-toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border,#2a3d55); flex-wrap:wrap; background:#131c2e; }
 .wl-toolbar-label { font-size:0.78rem; color:var(--mute,#8899aa); white-space:nowrap; }
 .wl-col-picker { display:flex; flex-wrap:wrap; gap:6px; }
+.wl-height-tools { margin-left:auto; display:flex; align-items:center; gap:6px; }
+.wl-height-input { width:64px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:13px; text-align:center; font-family:inherit; }
 .wl-col-toggle { display:flex; align-items:center; gap:4px; font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid var(--border,#2a3d55); color:var(--mute,#8899aa); cursor:pointer; user-select:none; transition:all 0.15s; }
 .wl-col-toggle input { display:none; }
 .wl-col-toggle.active { background:rgba(61,142,240,0.15); border-color:#3d8ef0; color:#3d8ef0; }
@@ -247,6 +249,7 @@ textarea.input{height:72px;resize:none}
   .wl-table thead th, .wl-table td { padding:8px 8px; font-size:0.78rem; }
   .wl-col-name { left:64px; min-width:80px; }
   .wl-col-code { min-width:64px; }
+  .wl-height-tools { width:100%; margin-left:0; justify-content:flex-end; }
 }
 </style>
 </head>
@@ -284,7 +287,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g3</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g5</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -371,7 +374,7 @@ textarea.input{height:72px;resize:none}
 </div>
 
 <!-- Watchlist Tab -->
-<div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div></div><div id="wl-table-wrap"></div></div>
+<div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div><div class="wl-height-tools"><span class="wl-toolbar-label">表格高度</span><input id="wl-visible-rows" class="wl-height-input" type="number" min="3" max="30" step="1" inputmode="numeric"><span class="wl-toolbar-label">列</span></div></div><div id="wl-table-wrap"></div></div>
   </div>
 </div>
 
@@ -611,6 +614,14 @@ var WL_COL_DEFS = [
   {key:'unreal', label:'總損益'},
   {key:'unrPct', label:'總損益(%)'},
 ];
+var wlVisibleRows = (function(){ var v=parseInt(localStorage.getItem('wl_visible_rows')||'',10); return (!isNaN(v)&&v>=3&&v<=30)?v:(window.innerWidth<=640?8:12); })();
+function applyWlTableHeight(){
+  var rowH = window.innerWidth<=640 ? 41 : 45;
+  var headH = window.innerWidth<=640 ? 42 : 46;
+  var footH = 46;
+  var h = headH + footH + (wlVisibleRows * rowH);
+  document.documentElement.style.setProperty('--wl-table-max-height', h + 'px');
+}
 
 // ── Firebase helpers ───────────────────────────────────────
 function stocksRef() { return db.collection('users').doc(uid).collection('stocks'); }
@@ -2212,7 +2223,24 @@ function renderWatchlistTable() {
 
 function renderWatchlist() {
   buildWlColPicker();
+  applyWlTableHeight();
   renderWatchlistTable();
+  var inp=document.getElementById('wl-visible-rows');
+  if(inp){
+    inp.value = wlVisibleRows;
+    if(!inp.dataset.bound){
+      inp.dataset.bound='1';
+      inp.addEventListener('change', function(){
+        var v=parseInt(this.value,10);
+        if(isNaN(v)) v=window.innerWidth<=640?8:12;
+        v=Math.max(3, Math.min(30, v));
+        this.value=v;
+        wlVisibleRows=v;
+        localStorage.setItem('wl_visible_rows', String(v));
+        applyWlTableHeight();
+      });
+    }
+  }
 }
 
 function _renderWatchlistOLD() {
