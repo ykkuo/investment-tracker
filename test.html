@@ -241,7 +241,8 @@ textarea.input{height:72px;resize:none}
 .wl-toolbar-label { font-size:0.78rem; color:var(--mute,#8899aa); white-space:nowrap; }
 .wl-col-picker { display:flex; flex-wrap:wrap; gap:6px; }
 .wl-height-tools { margin-left:auto; display:flex; align-items:center; gap:6px; }
-.wl-height-input { width:64px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:13px; text-align:center; font-family:inherit; }
+.wl-height-input { width:48px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:13px; text-align:center; font-family:inherit; }
+.wl-rows-btn { width:32px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:18px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit; line-height:1; padding:0; }
 .wl-col-toggle { display:flex; align-items:center; gap:4px; font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid var(--border,#2a3d55); color:var(--mute,#8899aa); cursor:pointer; user-select:none; transition:all 0.15s; }
 .wl-col-toggle input { display:none; }
 .wl-col-toggle.active { background:rgba(61,142,240,0.15); border-color:#3d8ef0; color:#3d8ef0; }
@@ -287,15 +288,15 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g6</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g8</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="portfolio">📊 組合</button>
       <button class="tab-btn" data-tab="charts">📈 分析</button>
-      <button class="tab-btn" data-tab="data">📁 資料</button>
       <button class="tab-btn" data-tab="watchlist">📋 看板</button>
+      <button class="tab-btn" data-tab="data">📁 資料</button>
     </div>
   </div>
 
@@ -374,7 +375,7 @@ textarea.input{height:72px;resize:none}
 </div>
 
 <!-- Watchlist Tab -->
-<div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div><div class="wl-height-tools"><span class="wl-toolbar-label">表格高度</span><input id="wl-visible-rows" class="wl-height-input" type="number" min="3" max="30" step="1" inputmode="numeric"><span class="wl-toolbar-label">列</span></div></div><div id="wl-table-wrap"></div></div>
+<div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div><div class="wl-height-tools"><span class="wl-toolbar-label">表格大小</span><button type="button" id="btn-rows-dec" class="wl-rows-btn">−</button><input id="wl-visible-rows" class="wl-height-input" type="number" min="3" max="30" step="1" inputmode="numeric"><button type="button" id="btn-rows-inc" class="wl-rows-btn">+</button></div></div><div id="wl-table-wrap"></div></div>
   </div>
 </div>
 
@@ -743,7 +744,7 @@ async function fetchAllPrices() {
   document.getElementById('header-sub').textContent = '更新價格中…';
   const promises = stocks.filter(st => st.market!=='基金').map(st => fetchPrice(st.id, st.code, st.market));
   await Promise.all(promises);
-  document.getElementById('header-sub').textContent = '價格已更新 ' + new Date().toLocaleTimeString('zh-TW');
+  document.getElementById('header-sub').textContent = '價格已更新 ' + new Date().toLocaleTimeString('zh-TW') + ' (報價可能延遲)';
   renderPortfolio();
 }
 
@@ -2240,6 +2241,18 @@ function renderWatchlist() {
         applyWlTableHeight();
         renderWatchlistTable();
       };
+      document.getElementById('btn-rows-dec').addEventListener('click', function(){
+        var v=Math.max(3, wlVisibleRows-1);
+        inp.value=v; wlVisibleRows=v;
+        localStorage.setItem('wl_visible_rows',String(v));
+        applyWlTableHeight(); renderWatchlistTable();
+      });
+      document.getElementById('btn-rows-inc').addEventListener('click', function(){
+        var v=Math.min(30, wlVisibleRows+1);
+        inp.value=v; wlVisibleRows=v;
+        localStorage.setItem('wl_visible_rows',String(v));
+        applyWlTableHeight(); renderWatchlistTable();
+      });
       inp.addEventListener('input', onRowsInput);
       inp.addEventListener('change', function(){
         var v=parseInt(this.value,10);
