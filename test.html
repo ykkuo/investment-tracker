@@ -288,7 +288,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1646,12 +1646,25 @@ function showImportPreview(rows) {
   var html='<div class="import-card">' +
     '<div class="import-title">預覽（共 '+rows.length+' 筆）</div>' +
     '<div style="overflow-x:auto"><table class="preview-table"><tr>' +
-    '<th>日期</th><th>代號</th><th>名稱</th><th>類型</th><th>股數</th><th>總金額</th>' +
+    '<th>日期</th><th>代號</th><th>名稱</th><th>市場</th><th>類型</th><th>股數</th><th>單價</th><th>手續費</th><th>交易稅</th><th>賣出成本/股</th><th>總金額</th><th>備註</th>' +
     '</tr>';
   rows.slice(0,10).forEach(function(r){
-    html+='<tr><td>'+r.date+'</td><td>'+r.code+'</td><td>'+r.name+'</td><td>'+r.type+'</td><td>'+(r.shares||'')+'</td><td>'+r.total+'</td></tr>';
+    html+='<tr>' +
+      '<td>'+r.date+'</td>' +
+      '<td>'+r.code+'</td>' +
+      '<td>'+r.name+'</td>' +
+      '<td>'+(r.market||'')+'</td>' +
+      '<td>'+r.type+'</td>' +
+      '<td>'+(r.shares!=null?r.shares:'')+'</td>' +
+      '<td>'+(r.price!=null?r.price:'')+'</td>' +
+      '<td>'+(r.fee!=null&&r.fee!==0?r.fee:'')+'</td>' +
+      '<td>'+(r.tax!=null&&r.tax!==0?r.tax:'')+'</td>' +
+      '<td>'+(r.sellCost!=null?r.sellCost:'')+'</td>' +
+      '<td>'+r.total+'</td>' +
+      '<td>'+(r.note||'')+'</td>' +
+    '</tr>';
   });
-  if (rows.length>10) html+='<tr><td colspan="6" style="text-align:center;color:var(--text3)">…還有 '+(rows.length-10)+' 筆</td></tr>';
+  if (rows.length>10) html+='<tr><td colspan="12" style="text-align:center;color:var(--text3)">…還有 '+(rows.length-10)+' 筆</td></tr>';
   html+='</table></div>' +
     '<button class="btn-primary c-blue" id="btn-do-import" style="margin-top:16px">匯入 '+rows.length+' 筆資料</button>' +
     '<button class="btn-ghost" id="btn-cancel-import">取消</button>' +
