@@ -288,7 +288,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1055,7 +1055,7 @@ function renderPortfolio() {
           '</div>' :
           '<div class="price-row">' +
             '<div class="price-label">現價'+(isUS?' <span style="font-size:10px;color:var(--gold)">USD</span>':'')+'</div>' +
-            (st.market==='基金' || isUS ?
+            (st.market==='基金' ?
               '<input class="price-input" type="number" inputmode="decimal" placeholder="手動輸入" value="'+(priceCache[st.id]?priceCache[st.id].price:'')+'" data-pid="'+st.id+'">' :
               '<div>' +
                 '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?fn(pr,2):'抓取中…')+'</div>' +
