@@ -288,7 +288,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v49g8</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -413,15 +413,15 @@ textarea.input{height:72px;resize:none}
     </div>
     <div id="eform-shares-area">
       <div class="field">
-        <label class="field-label">股數</label>
+        <label class="field-label" id="ef-shares-label">股數</label>
         <input class="input" id="ef-shares" type="number" inputmode="decimal" placeholder="例：200">
       </div>
       <div class="field">
-        <label class="field-label">單價（元）</label>
+        <label class="field-label" id="ef-price-label">單價（元）</label>
         <input class="input" id="ef-price" type="number" inputmode="decimal" placeholder="例：550">
       </div>
       <div class="field">
-        <label class="field-label">手續費（元）</label>
+        <label class="field-label">手續費</label>
         <input class="input" id="ef-fee" type="number" inputmode="decimal" placeholder="0">
       </div>
       <div class="field" id="ef-tax-wrap">
@@ -434,14 +434,14 @@ textarea.input{height:72px;resize:none}
         <div class="field-hint">留空則自動使用當時平均成本；可手動填入指定成本</div>
       </div>
       <div class="field">
-        <label class="field-label">總金額（元）</label>
+        <label class="field-label" id="ef-total-label">總金額（元）</label>
         <input class="input" id="ef-total" type="number" inputmode="decimal" placeholder="自動計算或手動輸入">
         <div class="field-hint">留空則自動計算；或直接填入實際金額</div>
       </div>
     </div>
     <div id="eform-div-area" style="display:none">
       <div class="field">
-        <label class="field-label">股息金額（元）</label>
+        <label class="field-label" id="ef-amount-label">股息金額（元）</label>
         <input class="input" id="ef-amount" type="number" inputmode="decimal" placeholder="例：3000">
       </div>
     </div>
@@ -492,17 +492,17 @@ textarea.input{height:72px;resize:none}
     </div>
     <div id="form-shares-area">
       <div class="field">
-        <label class="field-label">股數</label>
+        <label class="field-label" id="f-shares-label">股數</label>
         <input class="input" id="f-shares" type="number" inputmode="decimal" placeholder="例：200">
       </div>
       <div class="field">
-        <label class="field-label">單價（元）</label>
+        <label class="field-label" id="f-price-label">單價（元）</label>
         <input class="input" id="f-price" type="number" inputmode="decimal" placeholder="例：550">
       </div>
       <div class="field">
-        <label class="field-label">手續費（元）</label>
-        <input class="input" id="f-fee" type="number" inputmode="decimal" placeholder="自動計算">
-        <div class="field-hint">成交金額 × 0.1425%（最低 20 元）</div>
+        <label class="field-label">手續費</label>
+        <input class="input" id="f-fee" type="number" inputmode="decimal" placeholder="自動計算（台股）/ 手動輸入（美股）">
+        <div class="field-hint" data-fee-hint>成交金額 × 0.1425%（最低 20 元）</div>
       </div>
       <div class="field" id="f-tax-wrap" style="display:none">
         <label class="field-label">交易稅（元）</label>
@@ -520,7 +520,7 @@ textarea.input{height:72px;resize:none}
     </div>
     <div id="form-div-area" style="display:none">
       <div class="field">
-        <label class="field-label">股息金額（元）</label>
+        <label class="field-label" id="f-amount-label">股息金額（元）</label>
         <input class="input" id="f-amount" type="number" inputmode="decimal" placeholder="例：3000">
       </div>
     </div>
@@ -919,7 +919,27 @@ function renderPortfolio() {
       totalRealCost += (s.realCost||0);
     });
     var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
+
+    // 檢查是否有美股混入（幣別提示）
+    var hasUS = stocks.some(function(st){
+      var s=sums[st.id];
+      if (showFilter==='holding' && s.cur<=0) return false;
+      if (showFilter==='sold' && s.cur>0) return false;
+      if (showMarket!=='all' && st.market!==showMarket) return false;
+      return st.market==='美股';
+    });
+    var hasTW = stocks.some(function(st){
+      var s=sums[st.id];
+      if (showFilter==='holding' && s.cur<=0) return false;
+      if (showFilter==='sold' && s.cur>0) return false;
+      if (showMarket!=='all' && st.market!==showMarket) return false;
+      return st.market!=='美股';
+    });
+    var mixedCurrencyWarning = (hasUS && hasTW) ?
+      '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gold);margin-bottom:12px">⚠️ 合計數字包含美股（USD）與台股（TWD），未套用匯率換算，僅供參考</div>' : '';
+
     html += '<div class="summary-card">' +
+      mixedCurrencyWarning +
       '<div class="summary-grid" style="margin-bottom:12px">' +
         '<div class="summary-item" style="padding-left:0">' +
           '<div class="summary-label">總投入成本</div>' +
@@ -1004,6 +1024,9 @@ function renderPortfolio() {
     sortedStocks.forEach(function(st){
       var s=sums[st.id], pr=getPrice(st.id), hp=pr>0;
       var cache=priceCache[st.id];
+      var isUS = st.market==='美股';
+      var curr = isUS ? 'USD' : '';
+      var currBadge = isUS ? '<span style="font-size:10px;color:var(--gold);font-weight:700;background:rgba(240,180,41,0.12);border-radius:4px;padding:1px 5px;margin-left:4px">USD</span>' : '';
       // Filter: holding/all/sold, market, and specific stock
       if (showFilter==='holding' && s.cur<=0) return;
       if (showFilter==='sold' && s.cur>0) return;
@@ -1026,13 +1049,13 @@ function renderPortfolio() {
         '<div class="divider"></div>' +
         (s.cur<=0 ?
           '<div class="stats-row">' +
-            '<div class="stat-box '+pbg(s.real)+'"><div class="stat-label">已實現損益</div><div class="stat-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+'</div><div class="stat-sub '+pcls(s.realPct)+'">'+fp(s.realPct)+'</div></div>' +
-            '<div class="stat-box bg-green"><div class="stat-label">累計股息</div><div class="stat-value green">'+fc(s.div)+'</div></div>' +
-            '<div class="stat-box '+pbg(s.real+s.div)+'"><div class="stat-label">總報酬（含息）</div><div class="stat-value '+pcls(s.real+s.div)+'">'+ps(s.real+s.div)+fc(s.real+s.div)+'</div></div>' +
+            '<div class="stat-box '+pbg(s.real)+'"><div class="stat-label">已實現損益'+currBadge+'</div><div class="stat-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+'</div><div class="stat-sub '+pcls(s.realPct)+'">'+fp(s.realPct)+'</div></div>' +
+            '<div class="stat-box bg-green"><div class="stat-label">累計股息'+currBadge+'</div><div class="stat-value green">'+fc(s.div)+'</div></div>' +
+            '<div class="stat-box '+pbg(s.real+s.div)+'"><div class="stat-label">總報酬（含息）'+currBadge+'</div><div class="stat-value '+pcls(s.real+s.div)+'">'+ps(s.real+s.div)+fc(s.real+s.div)+'</div></div>' +
           '</div>' :
           '<div class="price-row">' +
-            '<div class="price-label">現價</div>' +
-            (st.market==='基金' ?
+            '<div class="price-label">現價'+(isUS?' <span style="font-size:10px;color:var(--gold)">USD</span>':'')+'</div>' +
+            (st.market==='基金' || isUS ?
               '<input class="price-input" type="number" inputmode="decimal" placeholder="手動輸入" value="'+(priceCache[st.id]?priceCache[st.id].price:'')+'" data-pid="'+st.id+'">' :
               '<div>' +
                 '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?fn(pr,2):'抓取中…')+'</div>' +
@@ -1042,9 +1065,9 @@ function renderPortfolio() {
           '</div>' +
           '<div class="stats-row">' +
             '<div class="stat-box"><div class="stat-label">持股</div><div class="stat-value">'+fn(s.cur)+'</div><div class="stat-sub muted">股</div></div>' +
-            '<div class="stat-box"><div class="stat-label">平均成本</div><div class="stat-value">$'+fn(s.avg,2)+'</div></div>' +
+            '<div class="stat-box"><div class="stat-label">平均成本'+currBadge+'</div><div class="stat-value">$'+fn(s.avg,2)+'</div></div>' +
             '<div class="stat-box '+(hp?pbg(s.unreal):'')+'">' +
-              '<div class="stat-label">未實現損益</div>' +
+              '<div class="stat-label">未實現損益'+currBadge+'</div>' +
               (hp?'<div class="stat-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+'</div><div class="stat-sub '+pcls(s.unrPct)+'">'+fp(s.unrPct)+'</div>':'<div class="stat-value muted">—</div>') +
             '</div>' +
           '</div>'
@@ -1127,11 +1150,13 @@ function closeDetail() {
 function updateDetailHeaderPrice(sid) {
   var pr = getPrice(sid);
   var s = calc(sid, pr);
+  var st = stocks.find(function(x){ return x.id===sid; });
+  var isUS = st && st.market==='美股';
   var priceEl = document.getElementById('d-price');
   var timeEl = document.getElementById('d-price-time');
   if (!priceEl) return;
   if (pr > 0) {
-    priceEl.textContent = fn(pr, 2);
+    priceEl.textContent = fn(pr, 2) + (isUS ? ' USD' : '');
     priceEl.style.color = pr > 0 ? (s.unreal >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text2)';
     var cache = priceCache[sid];
     timeEl.textContent = cache ? fmtAt(cache.at) : '';
@@ -1145,6 +1170,9 @@ function updateDetailHeaderPrice(sid) {
 function renderDetail() {
   var sid=curStockId, pr=getPrice(sid);
   var s=calc(sid,pr), tot=s.real+s.div+(pr>0?s.unreal:0);
+  var st=stocks.find(function(x){ return x.id===sid; });
+  var isUS = st && st.market==='美股';
+  var currLabel = isUS ? ' <span style="font-size:10px;color:var(--gold);background:rgba(240,180,41,0.12);border-radius:3px;padding:1px 5px;font-weight:700">USD</span>' : '';
 
   // Sort by date desc
   var list=(txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return db>da?1:db<da?-1:0; });
@@ -1165,16 +1193,16 @@ function renderDetail() {
   });
 
   var html='<div class="info-card">' +
-
+    (isUS ? '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.25);border-radius:8px;padding:7px 10px;font-size:11px;color:var(--gold);margin-bottom:10px">💵 美股：所有金額以 USD 原幣顯示</div>' : '') +
     '<div class="info-row"><span class="info-label">持有股數</span><span class="info-value">'+fn(s.cur)+' 股</span></div>' +
-    '<div class="info-row"><span class="info-label">平均成本</span><span class="info-value">$'+fn(s.avg,2)+'</span></div>' +
-    '<div class="info-row"><span class="info-label">目前持倉成本</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
-    (pr>0?'<div class="info-row"><span class="info-label">市值</span><span class="info-value">'+fc(s.mv)+'</span></div>' +
-    '<div class="info-row"><span class="info-label">未實現損益</span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>':'') +
+    '<div class="info-row"><span class="info-label">平均成本'+currLabel+'</span><span class="info-value">$'+fn(s.avg,2)+'</span></div>' +
+    '<div class="info-row"><span class="info-label">目前持倉成本'+currLabel+'</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
+    (pr>0?'<div class="info-row"><span class="info-label">市值'+currLabel+'</span><span class="info-value">'+fc(s.mv)+'</span></div>' +
+    '<div class="info-row"><span class="info-label">未實現損益'+currLabel+'</span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>':'') +
     '<div class="divider"></div>' +
-    '<div class="info-row"><span class="info-label">已實現損益</span><span class="info-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+(s.realCost>0?' ('+fp(s.realPct)+')':'')+'</span></div>' +
-    '<div class="info-row"><span class="info-label">累計股息</span><span class="info-value green">'+fc(s.div)+'</span></div>' +
-    '<div class="info-row"><span class="info-label" style="font-weight:700">總報酬（含股息）</span><span class="info-value '+pcls(tot)+'" style="font-size:15px">'+ps(tot)+fc(tot)+(s.cost>0||s.realCost>0?' ('+fp(s.retPct)+')':'')+'</span></div>' +
+    '<div class="info-row"><span class="info-label">已實現損益'+currLabel+'</span><span class="info-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+(s.realCost>0?' ('+fp(s.realPct)+')':'')+'</span></div>' +
+    '<div class="info-row"><span class="info-label">累計股息'+currLabel+'</span><span class="info-value green">'+fc(s.div)+'</span></div>' +
+    '<div class="info-row"><span class="info-label" style="font-weight:700">總報酬（含股息）'+currLabel+'</span><span class="info-value '+pcls(tot)+'" style="font-size:15px">'+ps(tot)+fc(tot)+(s.cost>0||s.realCost>0?' ('+fp(s.retPct)+')':'')+'</span></div>' +
   '</div><div class="section-title">交易紀錄（由新到舊）</div>';
 
   if (list.length===0) {
@@ -1674,8 +1702,7 @@ function openAddStock() {
   document.getElementById('f-code').value='';
   document.getElementById('f-name').value='';
   curMarket='台股';
-  renderSeg('seg-market',['台股'],curMarket,'market');
-  curMarket='台股';
+  renderSeg('seg-market',['台股','美股','基金'],curMarket,'market');
   document.getElementById('m-stock').classList.add('open');
 }
 
@@ -1749,10 +1776,31 @@ function openAddTx() {
 function updateTxForm() {
   var isDiv=curType==='股息';
   var isSell=curType==='賣出';
+  var st = stocks.find(function(s){ return s.id===curStockId; });
+  var isUS = st && st.market==='美股';
   document.getElementById('form-shares-area').style.display=isDiv?'none':'';
   document.getElementById('form-div-area').style.display=isDiv?'':'none';
-  document.getElementById('f-tax-wrap').style.display=isSell?'':'none';
+  // 美股沒有交易稅，且只有台股賣出才顯示
+  document.getElementById('f-tax-wrap').style.display=(isSell && !isUS)?'':'none';
   document.getElementById('f-sellcost-wrap').style.display=isSell?'':'none';
+  // 更新手續費 hint
+  var feeHint = document.querySelector('#m-tx .field-hint[data-fee-hint]');
+  if (feeHint) {
+    if (isUS) {
+      feeHint.textContent = '美股手續費依券商而異，請手動輸入（USD）';
+    } else {
+      feeHint.textContent = '成交金額 × 0.1425%（最低 20 元）';
+    }
+  }
+  // 更新單價欄位 label
+  var priceLabel = document.getElementById('f-price-label');
+  var shareLabel = document.getElementById('f-shares-label');
+  var amtLabel = document.getElementById('f-amount-label');
+  var totalLabel = document.getElementById('f-total-label');
+  if (priceLabel) priceLabel.textContent = isUS ? '單價（USD）' : '單價（元）';
+  if (shareLabel) shareLabel.textContent = isUS ? '股數（Shares）' : '股數';
+  if (amtLabel) amtLabel.textContent = isUS ? '股息金額（USD）' : '股息金額（元）';
+  if (totalLabel) totalLabel.textContent = isUS ? (isSell?'實收金額（USD）':'總成本（USD）') : (isSell?'總金額（元）':'總金額（元）');
   var cls={買入:'c-green',賣出:'c-red',股息:'c-green',再投入:'c-purple'}[curType];
   var btn=document.getElementById('btn-submit-tx');
   btn.className='btn-primary '+cls;
@@ -1767,6 +1815,9 @@ function updateTxForm() {
 }
 
 function autoFee() {
+  var st = stocks.find(function(s){ return s.id===curStockId; });
+  var isUS = st && st.market==='美股';
+  if (isUS) return; // 美股手續費手動輸入
   var sh=parseFloat(document.getElementById('f-shares').value)||0;
   var pr=parseFloat(document.getElementById('f-price').value)||0;
   var tot=sh*pr;
@@ -1873,10 +1924,22 @@ function openEditTx(sid, txid) {
 function updateEditTxForm() {
   var isDiv = curEditType==='股息';
   var isSell = curEditType==='賣出';
+  var st = stocks.find(function(s){ return s.id===curStockId; });
+  var isUS = st && st.market==='美股';
   document.getElementById('eform-shares-area').style.display = isDiv?'none':'';
   document.getElementById('eform-div-area').style.display = isDiv?'':'none';
-  document.getElementById('ef-tax-wrap').style.display = isSell?'':'none';
+  // 美股沒有交易稅
+  document.getElementById('ef-tax-wrap').style.display = (isSell && !isUS)?'':'none';
   document.getElementById('ef-sellcost-wrap').style.display = isSell?'':'none';
+  // 更新貨幣單位標示
+  var ePriceLabel = document.getElementById('ef-price-label');
+  var eSharesLabel = document.getElementById('ef-shares-label');
+  var eAmtLabel = document.getElementById('ef-amount-label');
+  var eTotalLabel = document.getElementById('ef-total-label');
+  if (ePriceLabel) ePriceLabel.textContent = isUS ? '單價（USD）' : '單價（元）';
+  if (eSharesLabel) eSharesLabel.textContent = isUS ? '股數（Shares）' : '股數';
+  if (eAmtLabel) eAmtLabel.textContent = isUS ? '股息金額（USD）' : '股息金額（元）';
+  if (eTotalLabel) eTotalLabel.textContent = isUS ? '總金額（USD）' : '總金額（元）';
   var cls={買入:'c-green',賣出:'c-red',股息:'c-green',再投入:'c-purple'}[curEditType];
   document.getElementById('btn-submit-edit-tx').className='btn-primary '+cls;
 }
