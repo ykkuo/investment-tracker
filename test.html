@@ -297,12 +297,12 @@ textarea.input{height:72px;resize:none}
           <h1 id="tab-title" style="white-space:nowrap">投資組合</h1>
           <div class="market-filter-inline" id="market-filter-bar">
             <button class="mf-btn active" data-market="all">全部</button>
-            <button class="mf-btn" data-market="台股">🇹🇼</button>
-            <button class="mf-btn" data-market="美股">🇺🇸</button>
-            <button class="mf-btn" data-market="基金">📦</button>
+            <button class="mf-btn" data-market="台股">🇹🇼 台股</button>
+            <button class="mf-btn" data-market="美股">🇺🇸 美股</button>
+            <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a5</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a6</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -615,7 +615,8 @@ var showFilter = 'holding'; // 'holding' | 'all'
 var showMarket = 'all'; // 'all' | '台股' | '美股' | '基金'
 var sortBy = localStorage.getItem('pf_sortBy')||'recent';
 var sortDir = localStorage.getItem('pf_sortDir')||'asc';
-var curEditTxId = null;
+var usdRate = null;   // USD→TWD 匯率，null = 尚未抓到
+var usdRateAt = '';   // 匯率時間戳
 
 var pfPickerOpen = false;
 var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
@@ -754,8 +755,27 @@ async function fetchPrice(sid, code, market) {
   return priceCache[sid]?.price || 0;
 }
 
+async function fetchUsdRate() {
+  try {
+    // 用 Yahoo Finance 抓 USDTWD=X
+    const url = PROXY + encodeURIComponent(YF + 'USDTWD=X?interval=1d&range=1d');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const json = await res.json();
+    const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    if (price > 0) {
+      usdRate = price;
+      usdRateAt = new Date().toLocaleString('zh-TW', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    }
+  } catch(e) {}
+}
+
 async function fetchAllPrices() {
   document.getElementById('header-sub').textContent = '更新價格中…';
+  await fetchUsdRate();
   const promises = stocks.filter(st => st.market!=='基金').map(st => fetchPrice(st.id, st.code, st.market));
   await Promise.all(promises);
   document.getElementById('header-sub').textContent = '價格已更新 ' + new Date().toLocaleTimeString('zh-TW') + ' (報價可能延遲)';
@@ -910,6 +930,18 @@ function renderPortfolio() {
     s.lastDate=list.reduce(function(mx,t){ return (t.date||'')>mx?t.date:mx; },'');
     sums[st.id]=s;
   });
+
+  // 是否需要匯率換算（全部模式且同時有台股/美股）
+  var hasUSstocks = stocks.some(function(st){ return st.market==='美股'; });
+  var hasTWstocks = stocks.some(function(st){ return st.market!=='美股' && st.market!=='基金'; });
+  var needFx = showMarket==='all' && usdRate>0 && hasUSstocks && hasTWstocks;
+  var mixedNoFx = showMarket==='all' && !usdRate && hasUSstocks && hasTWstocks;
+  function toTWD(val, market) {
+    if (needFx && market==='美股') return val * usdRate;
+    if (mixedNoFx && market==='美股') return 0; // 匯率未取得時排除美股
+    return val;
+  }
+
   // Apply same filter as cards for summary
   var tc=0,tm=0,tr=0,td=0;
   stocks.forEach(function(st){
@@ -917,7 +949,10 @@ function renderPortfolio() {
     if (showFilter==='holding' && s.cur<=0) return;
     if (showFilter==='sold' && s.cur>0) return;
     if (showMarket!=='all' && st.market!==showMarket) return;
-    tc+=s.cost; tm+=s.mv; tr+=s.real; td+=s.div;
+    tc+=toTWD(s.cost, st.market);
+    tm+=toTWD(s.mv,   st.market);
+    tr+=toTWD(s.real, st.market);
+    td+=toTWD(s.div,  st.market);
   });
   var tu=tm-tc, tuPct=tc>0?tu/tc:0;
   var html='';
@@ -930,11 +965,11 @@ function renderPortfolio() {
       if (showFilter==='holding' && s.cur<=0) return;
       if (showFilter==='sold' && s.cur>0) return;
       if (showMarket!=='all' && st.market!==showMarket) return;
-      totalRealCost += (s.realCost||0);
+      totalRealCost += toTWD(s.realCost||0, st.market);
     });
     var totalRealPct = totalRealCost>0 ? tr/totalRealCost : 0;
 
-    // 檢查是否有美股混入（幣別提示）
+    // 幣別提示
     var hasUS = stocks.some(function(st){
       var s=sums[st.id];
       if (showFilter==='holding' && s.cur<=0) return false;
@@ -949,8 +984,14 @@ function renderPortfolio() {
       if (showMarket!=='all' && st.market!==showMarket) return false;
       return st.market!=='美股';
     });
-    var mixedCurrencyWarning = (hasUS && hasTW) ?
-      '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gold);margin-bottom:12px">⚠️ 合計數字包含美股（USD）與台股（TWD），未套用匯率換算，僅供參考</div>' : '';
+    var mixedCurrencyWarning = '';
+    if (hasUS && hasTW) {
+      if (needFx) {
+        mixedCurrencyWarning = '<div style="background:rgba(52,199,123,0.08);border:1px solid rgba(52,199,123,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px">💱 美股已換算為台幣　匯率 USD/TWD = <b>'+usdRate.toFixed(2)+'</b>　<span style="opacity:0.7">'+usdRateAt+'</span></div>';
+      } else {
+        mixedCurrencyWarning = '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gold);margin-bottom:12px">⚠️ 匯率抓取中，合計暫不含美股換算</div>';
+      }
+    }
 
     html += '<div class="summary-card">' +
       mixedCurrencyWarning +
