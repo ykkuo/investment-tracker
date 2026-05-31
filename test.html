@@ -197,7 +197,13 @@ textarea.input{height:72px;resize:none}
 .filter-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
 /* ── Tx edit btn ── */
 .tx-edit{background:none;border:none;color:var(--accent2);cursor:pointer;font-size:13px;padding:4px;font-family:inherit}
-/* ── Chart market tabs ── */
+/* ── Global market filter ── */
+.market-filter-bar{display:flex;gap:6px;padding:8px 0 10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.market-filter-btn{padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:all 0.15s}
+.market-filter-btn.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
+.market-filter-btn[data-market="台股"].active{background:rgba(52,199,123,0.12);border-color:var(--green);color:var(--green)}
+.market-filter-btn[data-market="美股"].active{background:rgba(240,180,41,0.12);border-color:var(--gold);color:var(--gold)}
+.market-filter-btn[data-market="基金"].active{background:var(--purple-bg);border-color:var(--purple);color:var(--purple)}
 .market-tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
 .market-tab{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0}
 .market-tab.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
@@ -288,7 +294,7 @@ textarea.input{height:72px;resize:none}
     <div class="header-top">
       <div>
         <h1 id="tab-title">投資組合</h1>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a3</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a4</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -297,6 +303,12 @@ textarea.input{height:72px;resize:none}
       <button class="tab-btn" data-tab="charts">📈 分析</button>
       <button class="tab-btn" data-tab="watchlist">📋 看板</button>
       <button class="tab-btn" data-tab="data">📁 資料</button>
+    </div>
+    <div class="market-filter-bar" id="market-filter-bar">
+      <button class="market-filter-btn active" data-market="all">全部</button>
+      <button class="market-filter-btn" data-market="台股">🇹🇼 台股</button>
+      <button class="market-filter-btn" data-market="美股">🇺🇸 美股</button>
+      <button class="market-filter-btn" data-market="基金">📦 基金</button>
     </div>
   </div>
 
@@ -2228,7 +2240,24 @@ document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
 (document.getElementById('btn-submit-edit-tx')||{addEventListener:function(){}} ).addEventListener('click', submitEditTx);
 (document.getElementById('btn-cancel-edit-tx')||{addEventListener:function(){}} ).addEventListener('click', function(){ document.getElementById('m-edit-tx').classList.remove('open'); });
 
-// market tabs hidden
+// ── Global market filter ──────────────────────────────────
+document.querySelectorAll('[data-market]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var mkt = this.dataset.market;
+    showMarket = mkt;
+    curChartMarket = mkt;
+    document.querySelectorAll('[data-market]').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('[data-market="'+mkt+'"]').forEach(function(b){ b.classList.add('active'); });
+    // Re-render whichever tab is active
+    var activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab) {
+      var tab = activeTab.dataset.tab;
+      if (tab==='portfolio') renderPortfolio();
+      else if (tab==='charts') { chartSelectedIds=null; renderCharts(); }
+      else if (tab==='watchlist') renderWatchlist();
+    }
+  });
+});
 
 // ── Watchlist ───────────────────────────────────────────────
 
@@ -2252,9 +2281,14 @@ function buildWlColPicker() {
 function renderWatchlistTable() {
   var wrap = document.getElementById('wl-table-wrap');
   if (!wrap) return;
-  var holding = stocks.filter(function(st){ return calc(st.id, getPrice(st.id)).cur > 0; });
+  var holding = stocks.filter(function(st){
+    if (calc(st.id, getPrice(st.id)).cur <= 0) return false;
+    if (showMarket !== 'all' && st.market !== showMarket) return false;
+    return true;
+  });
   if (holding.length === 0) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">尚無持倉</div></div>';
+    var mktLabel = showMarket==='all' ? '' : '（'+showMarket+'）';
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">尚無持倉'+mktLabel+'</div></div>';
     return;
   }
   var rows = holding.map(function(st){
@@ -2283,6 +2317,7 @@ function renderWatchlistTable() {
     unreal:function(r){return fmtPnl(r.s.unreal);},
     unrPct:function(r){return fmtPct(r.s.unrPct);}
   };
+  var currNote = showMarket==='美股' ? ' <span style="font-size:10px;color:var(--gold);font-weight:700">USD</span>' : '';
   var h='<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>';
   h+='<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
   active.forEach(function(c){h+='<th style="text-align:right">'+c.label+'</th>';});
@@ -2293,7 +2328,7 @@ function renderWatchlistTable() {
     active.forEach(function(c){h+='<td style="text-align:right">'+cellFn[c.key](r)+'</td>';});
     h+='</tr>';
   });
-  h+='<tr class="wl-total-row"><td class="wl-sticky wl-col-code" style="font-weight:700">合計</td><td class="wl-sticky wl-col-name"></td>';
+  h+='<tr class="wl-total-row"><td class="wl-sticky wl-col-code" style="font-weight:700">合計'+currNote+'</td><td class="wl-sticky wl-col-name"></td>';
   active.forEach(function(c){h+='<td style="text-align:right">'+(totals[c.key]||'')+'</td>';});
   h+='</tr></tbody></table></div>';
   wrap.innerHTML = h;
