@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a7</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50a8</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1234,6 +1234,15 @@ function renderPortfolio() {
   document.querySelectorAll('[data-pid]').forEach(function(inp){
     inp.addEventListener('click', function(e){ e.stopPropagation(); });
     inp.addEventListener('input', function(){
+      var sid=this.dataset.pid, val=parseFloat(this.value)||0;
+      priceCache[sid]={price:val, at:new Date().toISOString()};
+    });
+    inp.addEventListener('change', function(){
+      var sid=this.dataset.pid, val=parseFloat(this.value)||0;
+      savePriceDb(sid, val);
+      priceCache[sid]={price:val, at:new Date().toISOString()};
+    });
+    inp.addEventListener('blur', function(){
       var sid=this.dataset.pid, val=parseFloat(this.value)||0;
       savePriceDb(sid, val);
       priceCache[sid]={price:val, at:new Date().toISOString()};
