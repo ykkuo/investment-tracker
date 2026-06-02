@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b3</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b4</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -977,6 +977,9 @@ function isUSDAsset(st) {
   return st.market==='美股' || (st.market==='基金' && st.currency==='USD');
 }
 function toTWDGlobal(val, st) {
+  // 純美股頁：直接顯示 USD 原值，不換算
+  if (showMarket === '美股') return val;
+  // 其他（全部 / 台股 / 基金）：USD 資產換算成 TWD
   if (usdRate>0 && isUSDAsset(st)) return val * usdRate;
   return val;
 }
@@ -1003,6 +1006,8 @@ function renderPortfolio() {
   var mixedNoFx = hasAnyUSDinView && !usdRate;
   function isUSDAsset(st) { return st.market==='美股' || (st.market==='基金' && st.currency==='USD'); }
   function toTWD(val, st) {
+    // 純美股頁：直接顯示 USD 原值
+    if (showMarket === '美股') return val;
     if (needFx && isUSDAsset(st)) return val * usdRate;
     if (mixedNoFx && isUSDAsset(st)) return 0;
     return val;
@@ -1055,12 +1060,14 @@ function renderPortfolio() {
       return !isUSDAsset(st);
     });
     var mixedCurrencyWarning = '';
-    if (hasAnyUSDinView) {
+    if (hasAnyUSDinView && showMarket !== '美股') {
       if (needFx) {
         mixedCurrencyWarning = '<div style="background:rgba(52,199,123,0.08);border:1px solid rgba(52,199,123,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px">💱 美股及美金計價基金已換算為台幣　匯率 USD/TWD = <b>'+usdRate.toFixed(2)+'</b>　<span style="opacity:0.7">'+usdRateAt+'</span></div>';
       } else {
         mixedCurrencyWarning = '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gold);margin-bottom:12px">⚠️ 匯率抓取中，合計暫不含美元資產換算</div>';
       }
+    } else if (hasAnyUSDinView && showMarket === '美股') {
+      mixedCurrencyWarning = '<div style="background:rgba(240,180,41,0.08);border:1px solid rgba(240,180,41,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gold);margin-bottom:12px">💵 美股以 USD 計價顯示</div>';
     }
 
     html += '<div class="summary-card">' +
@@ -2579,8 +2586,8 @@ function renderWatchlistTable() {
     unreal:function(r){return fmtPnl(toTWDGlobal(r.s.unreal, r.st));},
     unrPct:function(r){return fmtPct(r.s.unrPct);}
   };
-  // 看板已統一換算為 TWD（toTWDGlobal），無需額外 USD 標示
-  var currNote = '';
+  // 美股頁顯示 USD，其他頁已換算為 TWD
+  var currNote = showMarket==='美股' ? ' <span style="font-size:10px;color:var(--gold);font-weight:700">USD</span>' : '';
   var h='<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>';
   h+='<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
   active.forEach(function(c){h+='<th style="text-align:right">'+c.label+'</th>';});
