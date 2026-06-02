@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -985,8 +985,13 @@ function renderPortfolio() {
   var hasUSstocks = stocks.some(function(st){ return st.market==='美股'; });
   var hasUSDfunds = stocks.some(function(st){ return st.market==='基金' && st.currency==='USD'; });
   var hasTWstocks = stocks.some(function(st){ return st.market!=='美股' && !(st.market==='基金' && st.currency==='USD'); });
-  var needFx = showMarket==='all' && usdRate>0 && (hasUSstocks || hasUSDfunds) && hasTWstocks;
-  var mixedNoFx = showMarket==='all' && !usdRate && (hasUSstocks || hasUSDfunds) && hasTWstocks;
+  // 是否有 USD 資產在當前顯示範圍內
+  var hasAnyUSDinView = stocks.some(function(st){
+    if (showMarket!=='all' && st.market!==showMarket) return false;
+    return isUSDAsset(st);
+  });
+  var needFx = hasAnyUSDinView && usdRate>0;
+  var mixedNoFx = hasAnyUSDinView && !usdRate;
   function isUSDAsset(st) { return st.market==='美股' || (st.market==='基金' && st.currency==='USD'); }
   function toTWD(val, st) {
     if (needFx && isUSDAsset(st)) return val * usdRate;
@@ -1041,7 +1046,7 @@ function renderPortfolio() {
       return !isUSDAsset(st);
     });
     var mixedCurrencyWarning = '';
-    if (hasUS && hasTW) {
+    if (hasAnyUSDinView) {
       if (needFx) {
         mixedCurrencyWarning = '<div style="background:rgba(52,199,123,0.08);border:1px solid rgba(52,199,123,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px">💱 美股及美金計價基金已換算為台幣　匯率 USD/TWD = <b>'+usdRate.toFixed(2)+'</b>　<span style="opacity:0.7">'+usdRateAt+'</span></div>';
       } else {
