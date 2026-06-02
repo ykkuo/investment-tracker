@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -970,6 +970,15 @@ function buildPortfolioPicker() {
     if (panel) panel.classList.add('open');
     pfPickerOpen = false;
   }
+}
+
+// 全域換算 helper（圖表/看板共用）
+function isUSDAsset(st) {
+  return st.market==='美股' || (st.market==='基金' && st.currency==='USD');
+}
+function toTWDGlobal(val, st) {
+  if (usdRate>0 && isUSDAsset(st)) return val * usdRate;
+  return val;
 }
 
 function renderPortfolio() {
@@ -1674,10 +1683,10 @@ function renderCharts() {
         var pr=getPrice(st.id),s=calc(st.id,pr);
         labels.push(st.name);
         names.push(st.code);
-        costs.push(Math.round(s.mv||s.cost));
-        unreals.push(Math.round(s.unreal));
-        reals.push(Math.round(s.real));
-        divs.push(Math.round(s.div));
+        costs.push(Math.round(toTWDGlobal(s.mv||s.cost, st)));
+        unreals.push(Math.round(toTWDGlobal(s.unreal, st)));
+        reals.push(Math.round(toTWDGlobal(s.real, st)));
+        divs.push(Math.round(toTWDGlobal(s.div, st)));
         retPcts.push(parseFloat((s.retPct*100).toFixed(2)));
         colors.push(palette[i%palette.length]);
       });
@@ -1712,10 +1721,10 @@ function renderCharts() {
     var pr=getPrice(st.id),s=calc(st.id,pr);
     labels.push(st.name);
     names.push(st.code);
-    costs.push(Math.round(s.mv||s.cost));
-    unreals.push(Math.round(s.unreal));
-    reals.push(Math.round(s.real));
-    divs.push(Math.round(s.div));
+    costs.push(Math.round(toTWDGlobal(s.mv||s.cost, st)));
+    unreals.push(Math.round(toTWDGlobal(s.unreal, st)));
+    reals.push(Math.round(toTWDGlobal(s.real, st)));
+    divs.push(Math.round(toTWDGlobal(s.div, st)));
     retPcts.push(parseFloat((s.retPct*100).toFixed(2)));
     colors.push(palette[i%palette.length]);
   });
@@ -1726,7 +1735,7 @@ function renderCharts() {
     var mktLabels=['台股','美股','基金'], mktCosts=[0,0,0];
     filteredStocks.forEach(function(st){
       var pr=getPrice(st.id),s=calc(st.id,pr);
-      var val=s.mv||s.cost;
+      var val=toTWDGlobal(s.mv||s.cost, st);
       if(st.market==='台股') mktCosts[0]+=val;
       else if(st.market==='美股') mktCosts[1]+=val;
       else mktCosts[2]+=val;
@@ -2543,11 +2552,15 @@ function renderWatchlistTable() {
   var rows = holding.map(function(st){
     var pr = getPrice(st.id), s = calc(st.id, pr);
     var pc = priceCache[st.id] && priceCache[st.id].prevClose ? priceCache[st.id].prevClose : 0;
-    return {st:st, s:s, pr:pr, dayPnl:pc>0?(pr-pc)*s.cur:null, dayPct:pc>0?(pr-pc)/pc:null};
+    var rawDayPnl = pc>0 ? (pr-pc)*s.cur : null;
+    var dayPnl = rawDayPnl!==null ? toTWDGlobal(rawDayPnl, st) : null;
+    return {st:st, s:s, pr:pr, dayPnl:dayPnl, dayPct:pc>0?(pr-pc)/pc:null};
   });
   var totalCost=0, totalMv=0, totalUnreal=0, totalDayPnl=null;
   rows.forEach(function(r){
-    totalCost+=r.s.cost||0; totalMv+=r.s.mv||0; totalUnreal+=r.s.unreal||0;
+    totalCost+=toTWDGlobal(r.s.cost||0, r.st);
+    totalMv+=toTWDGlobal(r.s.mv||0, r.st);
+    totalUnreal+=toTWDGlobal(r.s.unreal||0, r.st);
     if(r.dayPnl!==null) totalDayPnl=(totalDayPnl||0)+r.dayPnl;
   });
   var totalUnrPct = totalCost>0 ? totalUnreal/totalCost : null;
@@ -2559,14 +2572,15 @@ function renderWatchlistTable() {
   var cellFn = {
     shares:function(r){return fn(r.s.cur);},
     price: function(r){return '$'+fn(r.pr,2);},
-    cost:  function(r){return '$'+fn(Math.round(r.s.cost));},
-    mv:    function(r){return '$'+fn(Math.round(r.s.mv));},
+    cost:  function(r){return '$'+fn(Math.round(toTWDGlobal(r.s.cost, r.st)));},
+    mv:    function(r){return '$'+fn(Math.round(toTWDGlobal(r.s.mv, r.st)));},
     dayPnl:function(r){return fmtPnl(r.dayPnl);},
     dayPct:function(r){return fmtPct(r.dayPct);},
-    unreal:function(r){return fmtPnl(r.s.unreal);},
+    unreal:function(r){return fmtPnl(toTWDGlobal(r.s.unreal, r.st));},
     unrPct:function(r){return fmtPct(r.s.unrPct);}
   };
-  var currNote = showMarket==='美股' ? ' <span style="font-size:10px;color:var(--gold);font-weight:700">USD</span>' : '';
+  // 看板已統一換算為 TWD（toTWDGlobal），無需額外 USD 標示
+  var currNote = '';
   var h='<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>';
   h+='<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
   active.forEach(function(c){h+='<th style="text-align:right">'+c.label+'</th>';});
