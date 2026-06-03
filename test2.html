@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a5</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a6</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1937,42 +1937,59 @@ function renderCharts() {
 // ── Import ─────────────────────────────────────────────────
 function parseCSV(text) {
   var lines=text.trim().split('\n'), rows=[];
-  var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim();}) : [];
-  var isNewFmt = header.length >= 11 || header.indexOf('賣出成本(每股)') !== -1;
-  var currencyColIdx = header.indexOf('幣別');
+  var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');}) : [];
+
+  // header-based lookup（相容新/舊/含幣別格式）
+  function col(cols, name) {
+    var idx = header.indexOf(name);
+    return (idx !== -1 && idx < cols.length) ? cols[idx].trim().replace(/^"|"$/g,'') : '';
+  }
+  function colF(cols, name) { var v=col(cols,name); return v ? parseFloat(v) : null; }
+
+  var isNewFmt = header.indexOf('賣出成本(每股)') !== -1 || header.length >= 11;
+  var hasCurrencyCol = header.indexOf('幣別') !== -1;
+
   for (var i=1;i<lines.length;i++) {
     var cols=lines[i].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
-    if (cols.length<8||!cols[0]) continue;
+    if (!cols[0]) continue;
+
     var row;
-    if (isNewFmt) {
-      var sc = cols[9] ? parseFloat(cols[9]) : null;
+    if (hasCurrencyCol || isNewFmt) {
+      // header-based（新格式 / 含幣別欄）
+      var sc = colF(cols,'賣出成本(每股)');
       row = {
-        date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
-        market:cols[3]||'台股', type:cols[4],
-        shares:cols[5]?parseFloat(cols[5]):null,
-        price:cols[6]?parseFloat(cols[6]):null,
-        fee:cols[7]?parseFloat(cols[7]):0,
-        tax:cols[8]?parseFloat(cols[8]):0,
-        total:parseFloat(cols[10])||0,
-        note:cols[11]||''
+        date:   toDateInput(col(cols,'日期')),
+        code:   (col(cols,'標的代號')||'').toUpperCase(),
+        name:   col(cols,'標的名稱'),
+        market: col(cols,'市場')||'台股',
+        type:   col(cols,'類型'),
+        shares: colF(cols,'股數'),
+        price:  colF(cols,'單價'),
+        fee:    parseFloat(col(cols,'手續費'))||0,
+        tax:    parseFloat(col(cols,'交易稅'))||0,
+        total:  parseFloat(col(cols,'總金額'))||0,
+        note:   col(cols,'備註'),
       };
       if (sc !== null && !isNaN(sc) && sc > 0) row.sellCost = sc;
-      var slRaw = cols[12] ? cols[12].trim() : '';
+      var slRaw = col(cols,'賣出批次(JSON)');
       if (slRaw) { try { var sl=JSON.parse(slRaw); if(Array.isArray(sl)&&sl.length) row.sellLots=sl; } catch(e){} }
+      if (hasCurrencyCol) row.currency = col(cols,'幣別')||null;
     } else {
+      // 舊格式（固定8欄，無 header）
+      if (cols.length < 8) continue;
       row = {
-        date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
-        market:cols[3]||'台股', type:cols[4],
-        shares:cols[5]?parseFloat(cols[5]):null,
-        price:cols[6]?parseFloat(cols[6]):null,
-        total:parseFloat(cols[7])||0,
-        note:cols[8]||''
+        date:   toDateInput(cols[0]),
+        code:   (cols[1]||'').toUpperCase(),
+        name:   cols[2],
+        market: cols[3]||'台股',
+        type:   cols[4],
+        shares: cols[5] ? parseFloat(cols[5]) : null,
+        price:  cols[6] ? parseFloat(cols[6]) : null,
+        total:  parseFloat(cols[7])||0,
+        note:   cols[8]||''
       };
     }
-    // 讀取幣別欄（任何格式都支援）
-    if (currencyColIdx !== -1 && cols[currencyColIdx]) {
-      row.currency = cols[currencyColIdx].trim();
-    }
+    if (!row.code || !row.type) continue;
     rows.push(row);
   }
   return rows;
