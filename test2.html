@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a3</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a4</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1657,10 +1657,14 @@ function renderCharts() {
   chartInstances.forEach(function(c){ if(c) c.destroy(); });
   chartInstances=[];
 
-  // 頂層 tab：市場概覽時，直接走 allocation/market 分支
+  // 頂層 tab 控制分支
   if (curChartTopTab==='market') {
+    // 市場概覽：強制走 allocation/market 分支
     curChartType='allocation';
     curAllocTab='market';
+  } else {
+    // 個股配置：curAllocTab 固定為 'stocks'（不受市場概覽影響）
+    curAllocTab='stocks';
   }
 
   // Sync filter button active states
@@ -2577,7 +2581,6 @@ function setChartTopTab(tab) {
   _topStocksBtn.classList.toggle('active', tab==='stocks');
   _stocksCtrl.style.display = tab==='stocks' ? '' : 'none';
   curChartTopTab = tab;
-  curAllocTab = 'market';
   renderCharts();
 }
 
