@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a6</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a8</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1481,6 +1481,13 @@ function renderBubble(tab) {
   var el=document.getElementById('myChart');
   if(!el) return;
 
+  // 匯率換算helper（只針對USD基金）
+  function fxMv(val, st) {
+    if (!usdRate) return val;
+    if (st.market==='基金' && st.currency==='USD') return val * usdRate;
+    return val;
+  }
+
   // Collect holding stocks
   var bubbleData=[];
   var filtered = stocks.filter(function(st){
@@ -1491,30 +1498,37 @@ function renderBubble(tab) {
   var maxMv=1;
   filtered.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
-    if(s.cur>0 && s.mv>maxMv) maxMv=s.mv;
+    var mv = fxMv(s.mv||s.cost, st);
+    if((s.cur>0||s.isFund) && mv>maxMv) maxMv=mv;
   });
   filtered.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
-    if(s.cur<=0) return;
+    var isActive = s.isFund ? s.cost>0 : s.cur>0;
+    if(!isActive) return;
     var pc=priceCache[st.id]&&priceCache[st.id].prevClose?priceCache[st.id].prevClose:0;
     var dayChangePct=pc>0?(pr-pc)/pc:0;
-    var dayChangeMv=pc>0?(pr-pc)*s.cur:0;
+    var dayChangeMv=fxMv(pc>0?(pr-pc)*(s.isFund?1:s.cur):0, st);
+    var unreal=fxMv(s.unreal, st);
+    var mv=fxMv(s.mv||s.cost, st);
     var isPos=tab==='pnl'?s.unrPct>=0:dayChangePct>=0;
-    var rScaled=Math.round(8+(40-8)*Math.sqrt(s.mv/maxMv));
+    var rScaled=Math.round(8+(40-8)*Math.sqrt(mv/maxMv));
     bubbleData.push({
-      x: tab==='pnl'?Math.round(s.unreal):Math.round(dayChangeMv),
+      x: tab==='pnl'?Math.round(unreal):Math.round(dayChangeMv),
       y: tab==='pnl'?parseFloat((s.unrPct*100).toFixed(2)):parseFloat((dayChangePct*100).toFixed(2)),
       r: rScaled,
-      name:st.name, code:st.code, mv:s.mv,
-      val:tab==='pnl'?s.unreal:dayChangeMv,
+      name:st.name, code:st.code, mv:mv,
+      val:tab==='pnl'?unreal:dayChangeMv,
       pct:tab==='pnl'?s.unrPct*100:dayChangePct*100,
-      isPos:isPos
+      isPos:isPos,
+      isUSD: st.market==='基金' && st.currency==='USD'
     });
   });
 
+  var hasUSD = bubbleData.some(function(d){ return d.isUSD; });
+  var fxNote = (hasUSD && usdRate) ? '（元，USD基金已換算）' : '（元）';
   var bgColors=bubbleData.map(function(d){return d.isPos?'rgba(52,199,123,0.80)':'rgba(255,92,92,0.80)';});
   var bdColors=bgColors.map(function(c){return c.replace('0.80','1');});
-  var xLabel=tab==='pnl'?'未實現損益（元）':'單日市值變動（元）';
+  var xLabel=tab==='pnl'?'未實現損益'+fxNote:'單日市值變動'+fxNote;
   var yLabel=tab==='pnl'?'未實現報酬率（%）':'單日漲跌幅（%）';
   var valLabel=tab==='pnl'?'未實現損益: ':'單日變動: ';
   var pctLabel=tab==='pnl'?'未實現報酬率: ':'單日漲跌: ';
@@ -1530,11 +1544,12 @@ function renderBubble(tab) {
           label:function(ctx){
             var d=ctx.raw;
             var sign=d.isPos?'+':'';
+            var currNote = d.isUSD ? (usdRate ? ' (USD×'+usdRate.toFixed(1)+')' : ' (USD)') : '';
             return [
-              d.name+' ('+d.code+')',
-              valLabel+sign+Math.round(d.val).toLocaleString('zh-TW')+' 元',
+              d.name+' ('+d.code+')'+(d.isUSD?' 💵':''),
+              valLabel+sign+Math.round(d.val).toLocaleString('zh-TW')+' 元'+currNote,
               pctLabel+sign+d.pct.toFixed(2)+'%',
-              '市值: $'+Math.round(d.mv).toLocaleString('zh-TW')
+              '市值: $'+Math.round(d.mv).toLocaleString('zh-TW')+' 元'+currNote
             ];
           },
           title:function(){return '';}
