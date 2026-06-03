@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -320,28 +320,36 @@ textarea.input{height:72px;resize:none}
   <!-- Charts Tab -->
   <div class="tab-content" id="tab-charts">
 
-    <div class="chart-tabs">
-      <button class="chart-tab active" data-chart="allocation">資產配置</button>
-      <button class="chart-tab" data-chart="pnl">損益 & 報酬率</button>
-      <button class="chart-tab" data-chart="dividend">股息統計</button>
-      <button class="chart-tab" data-chart="bubble">泡泡圖</button>
+    <!-- 頂層：市場概覽 / 個股配置 -->
+    <div class="alloc-subtabs" id="chart-top-tabs" style="margin-bottom:12px">
+      <button class="alloc-subtab" id="chart-top-market">市場概覽</button>
+      <button class="alloc-subtab active" id="chart-top-stocks">個股配置</button>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
-      <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
-        <button class="filter-btn active" data-chartfilter="all">全部</button>
-        <button class="filter-btn" data-chartfilter="holding">持有中</button>
-        <button class="filter-btn" data-chartfilter="sold">已出清</button>
+    <!-- 個股配置：子 tab + 篩選（market 時隱藏） -->
+    <div id="chart-stocks-controls">
+      <div class="chart-tabs">
+        <button class="chart-tab active" data-chart="allocation">配置</button>
+        <button class="chart-tab" data-chart="pnl">損益</button>
+        <button class="chart-tab" data-chart="dividend">配息</button>
+        <button class="chart-tab" data-chart="bubble">泡泡</button>
       </div>
-      <div class="chart-stock-picker" id="chart-stock-picker">
-        <button class="chart-picker-btn" id="chart-picker-toggle">
-          標的 <span id="chart-picker-count">全部</span> ▾
-        </button>
-        <div class="chart-picker-panel" id="chart-picker-panel">
-          <div class="chart-picker-actions">
-            <button id="chart-picker-all">全選</button>
-            <button id="chart-picker-none">清除</button>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
+        <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
+          <button class="filter-btn active" data-chartfilter="all">全部</button>
+          <button class="filter-btn" data-chartfilter="holding">持有中</button>
+          <button class="filter-btn" data-chartfilter="sold">已出清</button>
+        </div>
+        <div class="chart-stock-picker" id="chart-stock-picker">
+          <button class="chart-picker-btn" id="chart-picker-toggle">
+            標的 <span id="chart-picker-count">全部</span> ▾
+          </button>
+          <div class="chart-picker-panel" id="chart-picker-panel">
+            <div class="chart-picker-actions">
+              <button id="chart-picker-all">全選</button>
+              <button id="chart-picker-none">清除</button>
+            </div>
+            <div class="chart-picker-list" id="chart-picker-list"></div>
           </div>
-          <div class="chart-picker-list" id="chart-picker-list"></div>
         </div>
       </div>
     </div>
@@ -622,6 +630,7 @@ var curType = '買入';
 var curEditType = '買入';
 var curChartType = 'allocation';
 var curAllocTab = 'market'; // 'market' | 'stocks'
+var curChartTopTab = 'stocks'; // 'market' | 'stocks'
 var curChartMarket = 'all';
 var curChartFilter = 'all';
 var chartSelectedIds = null; // null = all selected
@@ -1647,6 +1656,13 @@ function updatePickerCount(baseStocks) {
 function renderCharts() {
   chartInstances.forEach(function(c){ if(c) c.destroy(); });
   chartInstances=[];
+
+  // 頂層 tab：市場概覽時，直接走 allocation/market 分支
+  if (curChartTopTab==='market') {
+    curChartType='allocation';
+    curAllocTab='market';
+  }
+
   // Sync filter button active states
   document.querySelectorAll('[data-chartfilter]').forEach(function(b){
     b.classList.toggle('active', b.dataset.chartfilter===curChartFilter);
@@ -1758,11 +1774,8 @@ function renderCharts() {
   var html='';
   if (curChartType==='allocation') {
     // ── 子 tab UI ──────────────────────────────────────────
-    var allocTabHtml =
-      '<div class="alloc-subtabs">' +
-      '<button class="alloc-subtab'+(curAllocTab==='market'?' active':'')+'" id="alloc-tab-market">市場概覽</button>' +
-      '<button class="alloc-subtab'+(curAllocTab==='stocks'?' active':'')+'" id="alloc-tab-stocks">個股配置</button>' +
-      '</div>';
+    // 頂層是市場概覽時，不在 chart-area 內顯示子 tab（由頂層按鈕控制）
+    var allocTabHtml = '';
 
     if (curAllocTab === 'stocks') {
       // ── 個股配置圓餅（原有邏輯）─────────────────────────
@@ -1872,15 +1885,7 @@ function renderCharts() {
       }));
     }
 
-    // ── 子 tab 事件綁定 ──────────────────────────────────────
-    var tabS = document.getElementById('alloc-tab-stocks');
-    var tabM = document.getElementById('alloc-tab-market');
-    if (tabS) tabS.addEventListener('click', function(){
-      curAllocTab='stocks'; chartInstances.forEach(function(c){if(c)c.destroy();}); chartInstances=[]; renderCharts();
-    });
-    if (tabM) tabM.addEventListener('click', function(){
-      curAllocTab='market'; chartInstances.forEach(function(c){if(c)c.destroy();}); chartInstances=[]; renderCharts();
-    });
+    // 子 tab 事件已移至頂層 setChartTopTab
   } else if (curChartType==='pnl') {
     html='<div class="chart-wrap"><div class="chart-title">損益 & 報酬率</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
@@ -2556,10 +2561,31 @@ document.querySelectorAll('.chart-tab').forEach(function(btn){
     document.querySelectorAll('.chart-tab').forEach(function(b){ b.classList.remove('active'); });
     this.classList.add('active');
     curChartType=this.dataset.chart;
-    if (curChartType!=='allocation') curAllocTab='market'; // 離開配置tab重設子tab
+    curAllocTab='market'; // 切子tab時重設
     renderCharts();
   });
 });
+
+// ── 頂層 tab：市場概覽 / 個股配置 ──────────────────────────
+var _topMarketBtn = document.getElementById('chart-top-market');
+var _topStocksBtn = document.getElementById('chart-top-stocks');
+var _stocksCtrl   = document.getElementById('chart-stocks-controls');
+
+function setChartTopTab(tab) {
+  // tab: 'market' | 'stocks'
+  _topMarketBtn.classList.toggle('active', tab==='market');
+  _topStocksBtn.classList.toggle('active', tab==='stocks');
+  _stocksCtrl.style.display = tab==='stocks' ? '' : 'none';
+  curChartTopTab = tab;
+  curAllocTab = 'market';
+  renderCharts();
+}
+
+if (_topMarketBtn) _topMarketBtn.addEventListener('click', function(){ setChartTopTab('market'); });
+if (_topStocksBtn) _topStocksBtn.addEventListener('click', function(){ setChartTopTab('stocks'); });
+
+// 初始化：預設個股配置，隱藏不需要的
+setChartTopTab('stocks');
 
 document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
   btn.addEventListener('click',function(){
