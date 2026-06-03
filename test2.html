@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a4</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a5</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1937,15 +1937,14 @@ function renderCharts() {
 // ── Import ─────────────────────────────────────────────────
 function parseCSV(text) {
   var lines=text.trim().split('\n'), rows=[];
-  // 判斷是新格式(12欄含fee/tax/sellCost)或舊格式(8欄)
   var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim();}) : [];
   var isNewFmt = header.length >= 11 || header.indexOf('賣出成本(每股)') !== -1;
+  var currencyColIdx = header.indexOf('幣別');
   for (var i=1;i<lines.length;i++) {
     var cols=lines[i].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
     if (cols.length<8||!cols[0]) continue;
     var row;
     if (isNewFmt) {
-      // 新格式: 日期,代號,名稱,市場,類型,股數,單價,手續費,交易稅,賣出成本(每股),總金額,備註
       var sc = cols[9] ? parseFloat(cols[9]) : null;
       row = {
         date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
@@ -1961,7 +1960,6 @@ function parseCSV(text) {
       var slRaw = cols[12] ? cols[12].trim() : '';
       if (slRaw) { try { var sl=JSON.parse(slRaw); if(Array.isArray(sl)&&sl.length) row.sellLots=sl; } catch(e){} }
     } else {
-      // 舊格式: 日期,代號,名稱,市場,類型,股數,單價,總金額,備註
       row = {
         date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
         market:cols[3]||'台股', type:cols[4],
@@ -1970,6 +1968,10 @@ function parseCSV(text) {
         total:parseFloat(cols[7])||0,
         note:cols[8]||''
       };
+    }
+    // 讀取幣別欄（任何格式都支援）
+    if (currencyColIdx !== -1 && cols[currencyColIdx]) {
+      row.currency = cols[currencyColIdx].trim();
     }
     rows.push(row);
   }
@@ -1982,7 +1984,7 @@ function showImportPreview(rows) {
   var html='<div class="import-card">' +
     '<div class="import-title">預覽（共 '+rows.length+' 筆）</div>' +
     '<div style="overflow-x:auto"><table class="preview-table"><tr>' +
-    '<th>日期</th><th>代號</th><th>名稱</th><th>市場</th><th>類型</th><th>股數</th><th>單價</th><th>手續費</th><th>交易稅</th><th>賣出成本/股</th><th>總金額</th><th>備註</th>' +
+    '<th>日期</th><th>代號</th><th>名稱</th><th>市場</th><th>幣別</th><th>類型</th><th>股數</th><th>單價</th><th>手續費</th><th>交易稅</th><th>賣出成本/股</th><th>總金額</th><th>備註</th>' +
     '</tr>';
   rows.slice(0,10).forEach(function(r){
     html+='<tr>' +
@@ -1990,6 +1992,7 @@ function showImportPreview(rows) {
       '<td>'+r.code+'</td>' +
       '<td>'+r.name+'</td>' +
       '<td>'+(r.market||'')+'</td>' +
+      '<td>'+(r.currency||'')+'</td>' +
       '<td>'+r.type+'</td>' +
       '<td>'+(r.shares!=null?r.shares:'')+'</td>' +
       '<td>'+(r.price!=null?r.price:'')+'</td>' +
@@ -2000,7 +2003,7 @@ function showImportPreview(rows) {
       '<td>'+(r.note||'')+'</td>' +
     '</tr>';
   });
-  if (rows.length>10) html+='<tr><td colspan="12" style="text-align:center;color:var(--text3)">…還有 '+(rows.length-10)+' 筆</td></tr>';
+  if (rows.length>10) html+='<tr><td colspan="13" style="text-align:center;color:var(--text3)">…還有 '+(rows.length-10)+' 筆</td></tr>';
   html+='</table></div>' +
     '<button class="btn-primary c-blue" id="btn-do-import" style="margin-top:16px">匯入 '+rows.length+' 筆資料</button>' +
     '<button class="btn-ghost" id="btn-cancel-import">取消</button>' +
@@ -2020,18 +2023,27 @@ async function doImport() {
   // Group by stock
   var stockMap={};
   importRows.forEach(function(r){
-    if (!stockMap[r.code]) stockMap[r.code]={code:r.code,name:r.name,market:r.market,txns:[]};
+    if (!stockMap[r.code]) stockMap[r.code]={code:r.code,name:r.name,market:r.market,currency:r.currency||null,txns:[]};
+    // 只要有任一筆帶幣別，就採用
+    if (r.currency && !stockMap[r.code].currency) stockMap[r.code].currency = r.currency;
     stockMap[r.code].txns.push({type:r.type,date:r.date,shares:r.shares,price:r.price,total:r.total,note:r.note,fee:0,tax:0});
   });
 
   for (var code in stockMap) {
     var sg=stockMap[code];
-    // Check if stock already exists
     var existing=stocks.find(function(s){return s.code===sg.code;});
     var sid;
-    if (existing) { sid=existing.id; }
-    else { sid=await addStockDb(sg.code,sg.name,sg.market); }
-    // Add transactions in batch
+    if (existing) {
+      sid=existing.id;
+      // 若匯入資料有幣別且現有標的未設定，補上
+      if (sg.market==='基金' && sg.currency && !existing.currency) {
+        await stocksRef().doc(sid).update({ currency: sg.currency });
+        existing.currency = sg.currency;
+      }
+    } else {
+      var currency = (sg.market==='基金' && sg.currency) ? sg.currency : null;
+      sid=await addStockDb(sg.code,sg.name,sg.market,currency);
+    }
     for (var j=0;j<sg.txns.length;j++) {
       await addTxDb(sid,sg.txns[j]);
     }
@@ -2042,7 +2054,6 @@ async function doImport() {
   fetchAllPrices();
   document.getElementById('import-preview').innerHTML='<div class="import-card"><div class="import-title" style="color:var(--green)">✅ 匯入完成！</div></div>';
   importRows=[];
-  // Switch to portfolio tab
   switchTab('portfolio');
 }
 
@@ -2445,11 +2456,12 @@ function downloadCSV(filename, rows) {
 }
 
 function exportTxCSV() {
-  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)']];
+  var rows = [['日期','標的代號','標的名稱','市場','幣別','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)']];
   stocks.forEach(function(st){
     var list = (txns[st.id]||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var currency = st.market==='基金' ? (st.currency||'TWD') : (st.market==='美股' ? 'USD' : 'TWD');
     list.forEach(function(tx){
-      rows.push([tx.date, st.code, st.name, st.market, tx.type,
+      rows.push([tx.date, st.code, st.name, st.market, currency, tx.type,
         tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0,
         (tx.type==='賣出' && tx.sellCost!=null) ? tx.sellCost : '',
         tx.total, tx.note||'',
@@ -2461,14 +2473,16 @@ function exportTxCSV() {
 }
 
 function exportSummaryCSV() {
-  var rows = [['標的代號','標的名稱','市場','持股數','平均成本','總持倉成本','現價','市值','未實現損益','未實現報酬率','已實現損益','累計股息','總報酬']];
+  var rows = [['標的代號','標的名稱','市場','幣別','持股數/投入本金','平均成本','總持倉成本','現價/淨值','市值','未實現損益','未實現報酬率','已實現損益','累計股息/配息','總報酬']];
   stocks.forEach(function(st){
     var pr = getPrice(st.id), s = calc(st.id, pr);
     var tot = s.real + s.div + (pr>0 ? s.unreal : 0);
+    var isFund = st.market==='基金';
+    var currency = isFund ? (st.currency||'TWD') : (st.market==='美股' ? 'USD' : 'TWD');
     rows.push([
-      st.code, st.name, st.market,
-      Math.round(s.cur*100)/100,
-      Math.round(s.avg*100)/100,
+      st.code, st.name, st.market, currency,
+      isFund ? Math.round(s.cost) : (Math.round(s.cur*100)/100),  // 基金顯示投入本金
+      isFund ? '' : (Math.round(s.avg*100)/100),                   // 基金無均價
       Math.round(s.cost),
       pr || '',
       pr ? Math.round(s.mv) : '',
