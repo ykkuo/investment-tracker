@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a8</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a9</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1756,9 +1756,11 @@ function renderCharts() {
       var inst=null;
       if (curChartType==='pnl') {
         var totals=unreals.map(function(u,i){return u+reals[i];});
+        var unrealColors=unreals.map(function(v){return v>=0?'rgba(61,142,240,0.7)':'rgba(255,92,92,0.7)';});
+        var realColors=reals.map(function(v){return v>=0?'rgba(52,199,123,0.7)':'rgba(255,140,0,0.7)';});
         inst=new Chart(el,{type:'bar',data:{labels:labels,names:names,datasets:[
-          {label:'未實現損益',data:unreals,backgroundColor:'rgba(61,142,240,0.7)',borderRadius:0,stack:'pnl',yAxisID:'y'},
-          {label:'已實現損益',data:reals,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:4,stack:'pnl',yAxisID:'y'},
+          {label:'未實現損益',data:unreals,backgroundColor:unrealColors,borderRadius:0,stack:'pnl',yAxisID:'y'},
+          {label:'已實現損益',data:reals,backgroundColor:realColors,borderRadius:4,stack:'pnl',yAxisID:'y'},
           {label:'報酬率',data:retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
         ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}},tooltip:{callbacks:{
           title:function(items){var i=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[i]:'';return code?(this.chart.data.labels[i]+' ('+code+')'):(this.chart.data.labels[i]);},
@@ -1909,9 +1911,11 @@ function renderCharts() {
     html='<div class="chart-wrap"><div class="chart-title">損益 & 報酬率</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
     var totals=unreals.map(function(u,i){return u+reals[i];});
+    var unrealColors=unreals.map(function(v){return v>=0?'rgba(61,142,240,0.7)':'rgba(255,92,92,0.7)';});
+    var realColors=reals.map(function(v){return v>=0?'rgba(52,199,123,0.7)':'rgba(255,140,0,0.7)';});
     chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:labels,codes:names,datasets:[
-      {label:'未實現損益',data:unreals,backgroundColor:'rgba(61,142,240,0.7)',borderRadius:0,stack:'pnl',yAxisID:'y'},
-      {label:'已實現損益',data:reals,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:4,stack:'pnl',yAxisID:'y'},
+      {label:'未實現損益',data:unreals,backgroundColor:unrealColors,borderRadius:0,stack:'pnl',yAxisID:'y'},
+      {label:'已實現損益',data:reals,backgroundColor:realColors,borderRadius:4,stack:'pnl',yAxisID:'y'},
       {label:'報酬率',data:retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}},tooltip:{callbacks:{
       title:function(items){var i=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[i]:'';return code?(this.chart.data.labels[i]+' ('+code+')'):(this.chart.data.labels[i]);},
