@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51a9</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -684,22 +684,65 @@ function hideLoadingBar() {
   if (wrap) wrap.classList.add('hidden');
 }
 
+// ── Local cache helpers ────────────────────────────────────
+var CACHE_KEY_PREFIX = 'inv_cache_';
+function getCacheKey() { return CACHE_KEY_PREFIX + (uid||''); }
+
+function saveLocalCache() {
+  try {
+    var payload = {
+      stocks: stocks,
+      txns: txns,
+      priceCache: priceCache,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(getCacheKey(), JSON.stringify(payload));
+  } catch(e) {}
+}
+
+function loadLocalCache() {
+  try {
+    var raw = localStorage.getItem(getCacheKey());
+    if (!raw) return false;
+    var payload = JSON.parse(raw);
+    // 快取超過 24 小時就忽略
+    if (Date.now() - payload.savedAt > 86400000) return false;
+    stocks = payload.stocks || [];
+    txns = payload.txns || {};
+    priceCache = payload.priceCache || {};
+    return true;
+  } catch(e) { return false; }
+}
+
+function clearLocalCache() {
+  try { localStorage.removeItem(getCacheKey()); } catch(e) {}
+}
+
 async function loadData() {
   setProgress(10, '讀取股票清單…');
   const snap = await stocksRef().orderBy('createdAt').get();
   stocks = [];
   txns = {};
-  const total = snap.docs.length || 1;
-  for (let i = 0; i < snap.docs.length; i++) {
-    const doc = snap.docs[i];
+
+  // 先把 stocks 和 priceCache 填好
+  snap.docs.forEach(function(doc) {
     const st = { id: doc.id, ...doc.data() };
     stocks.push(st);
     if (st.lastPrice) priceCache[doc.id] = { price: st.lastPrice, at: st.lastPriceAt || '' };
-    setProgress(10 + Math.round((i / total) * 70), '載入 ' + st.code + ' 交易紀錄… (' + (i+1) + '/' + total + ')');
-    const tSnap = await txnsRef(doc.id).orderBy('date','desc').get();
-    txns[doc.id] = tSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }
+  });
+
+  setProgress(30, '並行載入交易紀錄…');
+
+  // 並行抓所有 txns
+  const txnPromises = stocks.map(function(st) {
+    return txnsRef(st.id).orderBy('date','desc').get().then(function(tSnap) {
+      txns[st.id] = tSnap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    });
+  });
+  await Promise.all(txnPromises);
+
   setProgress(85, '整理資料…');
+  saveLocalCache();
 }
 
 async function addStockDb(code, name, market, currency) {
@@ -2580,15 +2623,34 @@ auth.onAuthStateChanged(async function(user) {
     document.getElementById('app').classList.add('ready');
     document.getElementById('user-name').textContent=user.displayName||user.email;
     if (user.photoURL) document.getElementById('user-avatar').src=user.photoURL;
-    setProgress(5, '驗證身份…');
-    await loadData();
-    setProgress(90, '渲染頁面…');
-    renderPortfolio();
-    setProgress(100, '完成！');
-    setTimeout(hideLoadingBar, 400);
-    fetchAllPrices();
+
+    var hasCached = loadLocalCache();
+    if (hasCached) {
+      // 有快取：直接顯示，loading bar 快速帶過
+      setProgress(80, '讀取本地快取…');
+      renderPortfolio();
+      setProgress(100, '完成！');
+      setTimeout(hideLoadingBar, 200);
+      // 背景靜默同步最新資料
+      document.getElementById('header-sub').textContent = '同步中…';
+      loadData().then(function() {
+        renderPortfolio();
+        document.getElementById('header-sub').textContent = '';
+        fetchAllPrices();
+      });
+    } else {
+      // 無快取：正常完整載入
+      setProgress(5, '驗證身份…');
+      await loadData();
+      setProgress(90, '渲染頁面…');
+      renderPortfolio();
+      setProgress(100, '完成！');
+      setTimeout(hideLoadingBar, 400);
+      fetchAllPrices();
+    }
   } else {
     uid=null; stocks=[]; txns={}; priceCache={};
+    clearLocalCache();
     hideLoadingBar();
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app').classList.remove('ready');
