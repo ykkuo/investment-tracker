@@ -137,7 +137,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .chart-picker-item:hover{background:var(--bg3)}
 .chart-picker-item input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .bubble-tab{padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.bubble-tab.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}
+.bubble-tab.active{background:rgba(61,142,240,0.15);border-color:var(--accent);color:var(--accent2)}.alloc-subtabs{display:flex;gap:6px;padding:4px;background:var(--bg3);border:1px solid var(--border);border-radius:14px;margin-bottom:14px}.alloc-subtab{flex:1;padding:8px 12px;border:none;border-radius:10px;background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.15s}.alloc-subtab.active{background:rgba(61,142,240,0.16);color:var(--accent2);box-shadow:inset 0 0 0 1px rgba(61,142,240,0.22)}
 .chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
 .chart-title{font-size:14px;font-weight:700;margin-bottom:16px}
 .chart-canvas-wrap{position:relative;height:260px}
@@ -296,13 +296,13 @@ textarea.input{height:72px;resize:none}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <h1 id="tab-title" style="white-space:nowrap">投資組合</h1>
           <div class="market-filter-inline" id="market-filter-bar">
-            <button class="mf-btn active" data-market="all">全部</button>
+            <button class="mf-btn active" data-market="all">全市場</button>
             <button class="mf-btn" data-market="台股">🇹🇼 台股</button>
             <button class="mf-btn" data-market="美股">🇺🇸 美股</button>
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v50b4</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b6</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -320,28 +320,36 @@ textarea.input{height:72px;resize:none}
   <!-- Charts Tab -->
   <div class="tab-content" id="tab-charts">
 
-    <div class="chart-tabs">
-      <button class="chart-tab active" data-chart="allocation">資產配置</button>
-      <button class="chart-tab" data-chart="pnl">損益 & 報酬率</button>
-      <button class="chart-tab" data-chart="dividend">股息統計</button>
-      <button class="chart-tab" data-chart="bubble">泡泡圖</button>
+    <!-- 頂層：市場概覽 / 個股配置 -->
+    <div class="alloc-subtabs" id="chart-top-tabs" style="margin-bottom:12px">
+      <button class="alloc-subtab" id="chart-top-market">市場概覽</button>
+      <button class="alloc-subtab active" id="chart-top-stocks">個股配置</button>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
-      <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
-        <button class="filter-btn active" data-chartfilter="all">全部</button>
-        <button class="filter-btn" data-chartfilter="holding">持有中</button>
-        <button class="filter-btn" data-chartfilter="sold">已出清</button>
+    <!-- 個股配置：子 tab + 篩選（market 時隱藏） -->
+    <div id="chart-stocks-controls">
+      <div class="chart-tabs">
+        <button class="chart-tab active" data-chart="allocation">配置</button>
+        <button class="chart-tab" data-chart="pnl">損益</button>
+        <button class="chart-tab" data-chart="dividend">配息</button>
+        <button class="chart-tab" data-chart="bubble">泡泡</button>
       </div>
-      <div class="chart-stock-picker" id="chart-stock-picker">
-        <button class="chart-picker-btn" id="chart-picker-toggle">
-          標的 <span id="chart-picker-count">全部</span> ▾
-        </button>
-        <div class="chart-picker-panel" id="chart-picker-panel">
-          <div class="chart-picker-actions">
-            <button id="chart-picker-all">全選</button>
-            <button id="chart-picker-none">清除</button>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
+        <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
+          <button class="filter-btn active" data-chartfilter="all">全部</button>
+          <button class="filter-btn" data-chartfilter="holding">持有中</button>
+          <button class="filter-btn" data-chartfilter="sold">已出清</button>
+        </div>
+        <div class="chart-stock-picker" id="chart-stock-picker">
+          <button class="chart-picker-btn" id="chart-picker-toggle">
+            標的 <span id="chart-picker-count">全部</span> ▾
+          </button>
+          <div class="chart-picker-panel" id="chart-picker-panel">
+            <div class="chart-picker-actions">
+              <button id="chart-picker-all">全選</button>
+              <button id="chart-picker-none">清除</button>
+            </div>
+            <div class="chart-picker-list" id="chart-picker-list"></div>
           </div>
-          <div class="chart-picker-list" id="chart-picker-list"></div>
         </div>
       </div>
     </div>
@@ -621,6 +629,9 @@ var curCurrency = 'TWD'; // 基金扣款幣別
 var curType = '買入';
 var curEditType = '買入';
 var curChartType = 'allocation';
+var curAllocTab = 'market'; // 'market' | 'stocks'
+var allocTop5 = false; // 個股配置是否只顯示前5大
+var curChartTopTab = 'stocks'; // 'market' | 'stocks'
 var curChartMarket = 'all';
 var curChartFilter = 'all';
 var chartSelectedIds = null; // null = all selected
@@ -674,22 +685,65 @@ function hideLoadingBar() {
   if (wrap) wrap.classList.add('hidden');
 }
 
+// ── Local cache helpers ────────────────────────────────────
+var CACHE_KEY_PREFIX = 'inv_cache_';
+function getCacheKey() { return CACHE_KEY_PREFIX + (uid||''); }
+
+function saveLocalCache() {
+  try {
+    var payload = {
+      stocks: stocks,
+      txns: txns,
+      priceCache: priceCache,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(getCacheKey(), JSON.stringify(payload));
+  } catch(e) {}
+}
+
+function loadLocalCache() {
+  try {
+    var raw = localStorage.getItem(getCacheKey());
+    if (!raw) return false;
+    var payload = JSON.parse(raw);
+    // 快取超過 24 小時就忽略
+    if (Date.now() - payload.savedAt > 86400000) return false;
+    stocks = payload.stocks || [];
+    txns = payload.txns || {};
+    priceCache = payload.priceCache || {};
+    return true;
+  } catch(e) { return false; }
+}
+
+function clearLocalCache() {
+  try { localStorage.removeItem(getCacheKey()); } catch(e) {}
+}
+
 async function loadData() {
   setProgress(10, '讀取股票清單…');
   const snap = await stocksRef().orderBy('createdAt').get();
   stocks = [];
   txns = {};
-  const total = snap.docs.length || 1;
-  for (let i = 0; i < snap.docs.length; i++) {
-    const doc = snap.docs[i];
+
+  // 先把 stocks 和 priceCache 填好
+  snap.docs.forEach(function(doc) {
     const st = { id: doc.id, ...doc.data() };
     stocks.push(st);
     if (st.lastPrice) priceCache[doc.id] = { price: st.lastPrice, at: st.lastPriceAt || '' };
-    setProgress(10 + Math.round((i / total) * 70), '載入 ' + st.code + ' 交易紀錄… (' + (i+1) + '/' + total + ')');
-    const tSnap = await txnsRef(doc.id).orderBy('date','desc').get();
-    txns[doc.id] = tSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }
+  });
+
+  setProgress(30, '並行載入交易紀錄…');
+
+  // 並行抓所有 txns
+  const txnPromises = stocks.map(function(st) {
+    return txnsRef(st.id).orderBy('date','desc').get().then(function(tSnap) {
+      txns[st.id] = tSnap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    });
+  });
+  await Promise.all(txnPromises);
+
   setProgress(85, '整理資料…');
+  saveLocalCache();
 }
 
 async function addStockDb(code, name, market, currency) {
@@ -977,9 +1031,20 @@ function isUSDAsset(st) {
   return st.market==='美股' || (st.market==='基金' && st.currency==='USD');
 }
 function toTWDGlobal(val, st) {
-  // 純美股頁：直接顯示 USD 原值，不換算
+  // 投資組合頁：純美股分頁直接顯示 USD 原值，不換算
   if (showMarket === '美股') return val;
   // 其他（全部 / 台股 / 基金）：USD 資產換算成 TWD
+  if (usdRate>0 && isUSDAsset(st)) return val * usdRate;
+  return val;
+}
+function toTWDChart(val, st) {
+  // 圖表/看板專用：依圖表市場篩選判斷，不跟隨 showMarket
+  if (curChartMarket === '美股') return val;
+  if (usdRate>0 && isUSDAsset(st)) return val * usdRate;
+  return val;
+}
+function toTWDAlways(val, st) {
+  // 市場概覽專用：一律換算成 TWD（不受任何市場篩選影響）
   if (usdRate>0 && isUSDAsset(st)) return val * usdRate;
   return val;
 }
@@ -1454,11 +1519,68 @@ function renderDetail() {
   });
 }
 
+// ── Top5 helpers ───────────────────────────────────────────
+function makeTop5Btn(total) {
+  if (total <= 5) return '';
+  return '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">' +
+    '<button class="chart-tab'+(allocTop5?'':' active')+'" id="btn-alloc-all" style="padding:4px 12px;font-size:12px">全部</button>' +
+    '<button class="chart-tab'+(allocTop5?' active':'')+'" id="btn-alloc-top5" style="padding:4px 12px;font-size:12px">前5大</button>' +
+  '</div>';
+}
+
+function bindTop5Btns() {
+  var btnAll = document.getElementById('btn-alloc-all');
+  var btnTop = document.getElementById('btn-alloc-top5');
+  if (btnAll) btnAll.addEventListener('click', function(){ allocTop5=false; renderCharts(); });
+  if (btnTop) btnTop.addEventListener('click', function(){ allocTop5=true; renderCharts(); });
+}
+
+// arrays: {key: array, ...}，sortFn(i) 回傳排序值，mergeFn(others, key) 回傳合併值
+function applyTop5(labels, names, arrays, sortFn, mergeFn) {
+  var n = labels.length;
+  if (!allocTop5 || n <= 5) {
+    var result = {labels:labels, names:names};
+    Object.keys(arrays).forEach(function(k){ result[k]=arrays[k]; });
+    return result;
+  }
+  var indexed = labels.map(function(_,i){ return i; });
+  indexed.sort(function(a,b){ return sortFn(b)-sortFn(a); });
+  var top = indexed.slice(0,5);
+  var rest = indexed.slice(5);
+  var rLabels = top.map(function(i){ return labels[i]; });
+  var rNames  = top.map(function(i){ return names[i]; });
+  var rArrays = {};
+  Object.keys(arrays).forEach(function(k){
+    rArrays[k] = top.map(function(i){ return arrays[k][i]; });
+    var merged = mergeFn(rest.map(function(i){
+      var o={}; Object.keys(arrays).forEach(function(k2){ o[k2]=arrays[k2][i]; }); return o;
+    }), k);
+    if (merged !== null) {
+      rLabels.push('其他 ('+rest.length+'檔)');
+      rNames.push('');
+      rArrays[k].push(Math.round(merged));
+    }
+  });
+  // 避免 labels/names 被重複 push 多次
+  rLabels = rLabels.slice(0, top.length + 1);
+  rNames  = rNames.slice(0, top.length + 1);
+  var result = {labels:rLabels, names:rNames};
+  Object.keys(arrays).forEach(function(k){ result[k]=rArrays[k]; });
+  return result;
+}
+
 // ── Charts ─────────────────────────────────────────────────
 function renderBubble(tab) {
   chartInstances.forEach(function(c){if(c)c.destroy();}); chartInstances=[];
   var el=document.getElementById('myChart');
   if(!el) return;
+
+  // 匯率換算helper（只針對USD基金）
+  function fxMv(val, st) {
+    if (!usdRate) return val;
+    if (st.market==='基金' && st.currency==='USD') return val * usdRate;
+    return val;
+  }
 
   // Collect holding stocks
   var bubbleData=[];
@@ -1470,30 +1592,46 @@ function renderBubble(tab) {
   var maxMv=1;
   filtered.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
-    if(s.cur>0 && s.mv>maxMv) maxMv=s.mv;
+    var mv = fxMv(s.mv||s.cost, st);
+    if((s.cur>0||s.isFund) && mv>maxMv) maxMv=mv;
   });
   filtered.forEach(function(st){
     var pr=getPrice(st.id), s=calc(st.id,pr);
-    if(s.cur<=0) return;
+    var isActive = s.isFund ? s.cost>0 : s.cur>0;
+    if(!isActive) return;
     var pc=priceCache[st.id]&&priceCache[st.id].prevClose?priceCache[st.id].prevClose:0;
     var dayChangePct=pc>0?(pr-pc)/pc:0;
-    var dayChangeMv=pc>0?(pr-pc)*s.cur:0;
+    var dayChangeMv=fxMv(pc>0?(pr-pc)*(s.isFund?1:s.cur):0, st);
+    var unreal=fxMv(s.unreal, st);
+    var mv=fxMv(s.mv||s.cost, st);
     var isPos=tab==='pnl'?s.unrPct>=0:dayChangePct>=0;
-    var rScaled=Math.round(8+(40-8)*Math.sqrt(s.mv/maxMv));
+    var rScaled=Math.round(8+(40-8)*Math.sqrt(mv/maxMv));
     bubbleData.push({
-      x: tab==='pnl'?Math.round(s.unreal):Math.round(dayChangeMv),
+      x: tab==='pnl'?Math.round(unreal):Math.round(dayChangeMv),
       y: tab==='pnl'?parseFloat((s.unrPct*100).toFixed(2)):parseFloat((dayChangePct*100).toFixed(2)),
       r: rScaled,
-      name:st.name, code:st.code, mv:s.mv,
-      val:tab==='pnl'?s.unreal:dayChangeMv,
+      name:st.name, code:st.code, mv:mv,
+      val:tab==='pnl'?unreal:dayChangeMv,
       pct:tab==='pnl'?s.unrPct*100:dayChangePct*100,
-      isPos:isPos
+      isPos:isPos,
+      isUSD: st.market==='基金' && st.currency==='USD'
     });
   });
 
+  // top5：依市值排序，只保留前5大（泡泡圖不合併「其他」，直接隱藏）
+  if (allocTop5 && bubbleData.length > 5) {
+    bubbleData.sort(function(a,b){ return b.mv-a.mv; });
+    bubbleData = bubbleData.slice(0,5);
+    // 重新計算 maxMv 和 r
+    var newMax = bubbleData.reduce(function(m,d){ return Math.max(m,d.mv); }, 1);
+    bubbleData.forEach(function(d){ d.r = Math.round(8+(40-8)*Math.sqrt(d.mv/newMax)); });
+  }
+
+  var hasUSD = bubbleData.some(function(d){ return d.isUSD; });
+  var fxNote = (hasUSD && usdRate) ? '（元，USD基金已換算）' : '（元）';
   var bgColors=bubbleData.map(function(d){return d.isPos?'rgba(52,199,123,0.80)':'rgba(255,92,92,0.80)';});
   var bdColors=bgColors.map(function(c){return c.replace('0.80','1');});
-  var xLabel=tab==='pnl'?'未實現損益（元）':'單日市值變動（元）';
+  var xLabel=tab==='pnl'?'未實現損益'+fxNote:'單日市值變動'+fxNote;
   var yLabel=tab==='pnl'?'未實現報酬率（%）':'單日漲跌幅（%）';
   var valLabel=tab==='pnl'?'未實現損益: ':'單日變動: ';
   var pctLabel=tab==='pnl'?'未實現報酬率: ':'單日漲跌: ';
@@ -1509,11 +1647,12 @@ function renderBubble(tab) {
           label:function(ctx){
             var d=ctx.raw;
             var sign=d.isPos?'+':'';
+            var currNote = d.isUSD ? (usdRate ? ' (USD×'+usdRate.toFixed(1)+')' : ' (USD)') : '';
             return [
-              d.name+' ('+d.code+')',
-              valLabel+sign+Math.round(d.val).toLocaleString('zh-TW')+' 元',
+              d.name+' ('+d.code+')'+(d.isUSD?' 💵':''),
+              valLabel+sign+Math.round(d.val).toLocaleString('zh-TW')+' 元'+currNote,
               pctLabel+sign+d.pct.toFixed(2)+'%',
-              '市值: $'+Math.round(d.mv).toLocaleString('zh-TW')
+              '市值: $'+Math.round(d.mv).toLocaleString('zh-TW')+' 元'+currNote
             ];
           },
           title:function(){return '';}
@@ -1635,6 +1774,17 @@ function updatePickerCount(baseStocks) {
 function renderCharts() {
   chartInstances.forEach(function(c){ if(c) c.destroy(); });
   chartInstances=[];
+
+  // 頂層 tab 控制分支
+  if (curChartTopTab==='market') {
+    // 市場概覽：強制走 allocation/market 分支
+    curChartType='allocation';
+    curAllocTab='market';
+  } else {
+    // 個股配置：curAllocTab 固定為 'stocks'（不受市場概覽影響）
+    curAllocTab='stocks';
+  }
+
   // Sync filter button active states
   document.querySelectorAll('[data-chartfilter]').forEach(function(b){
     b.classList.toggle('active', b.dataset.chartfilter===curChartFilter);
@@ -1655,6 +1805,13 @@ function renderCharts() {
     if (chartSelectedIds!==null && chartSelectedIds.indexOf(st.id)===-1) return false;
     return true;
   });
+  // 市場概覽專用：不受 picker 及 curChartMarket 限制，只套 curChartFilter
+  var marketStocks = stocks.filter(function(st){
+    var s=calc(st.id, getPrice(st.id));
+    if (curChartFilter==='holding' && s.cur<=0) return false;
+    if (curChartFilter==='sold' && s.cur>0) return false;
+    return true;
+  });
   if (filteredStocks.length===0) {
     document.getElementById('chart-area').innerHTML='<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-msg">此類別無資料</div></div>';
     return;
@@ -1667,55 +1824,74 @@ function renderCharts() {
     var markets=['台股','美股','基金'];
     var html='';
     var canvasIds=[];
+
+    // 先算各市場的 labels/data，方便計算 top5 按鈕需不需要顯示
+    var allMktData=[];
     markets.forEach(function(mkt){
       var mstocks=stocks.filter(function(st){
         if (st.market!==mkt) return false;
         var s=calc(st.id, getPrice(st.id));
-        if (curChartFilter==='holding' && s.cur<=0) return false;
-        if (curChartFilter==='sold' && s.cur>0) return false;
+        if (curChartFilter==='holding' && s.cur<=0 && !s.isFund) return false;
+        if (curChartFilter==='sold' && !s.isFund && s.cur>0) return false;
         if (chartSelectedIds!==null && chartSelectedIds.indexOf(st.id)===-1) return false;
         return true;
       });
       if (!mstocks.length) return;
-      var cid='chart-'+mkt;
-      canvasIds.push({id:cid,stocks:mstocks,market:mkt});
-      html+='<div class="chart-wrap"><div class="chart-title">'+mkt+'</div><div class="chart-canvas-wrap"><canvas id="'+cid+'"></canvas></div></div>';
-    });
-    document.getElementById('chart-area').innerHTML=html;
-    canvasIds.forEach(function(obj){
-      var mstocks=obj.stocks;
-      var labels=[],costs=[],unreals=[],reals=[],divs=[],retPcts=[],colors=[];
-      var names=[];
-      mstocks.forEach(function(st,i){
+      var mlabels=[],mnames=[],munreals=[],mreals=[],mdivs=[],mretPcts=[];
+      mstocks.forEach(function(st){
         var pr=getPrice(st.id),s=calc(st.id,pr);
-        labels.push(st.name);
-        names.push(st.code);
-        costs.push(Math.round(toTWDGlobal(s.mv||s.cost, st)));
-        unreals.push(Math.round(toTWDGlobal(s.unreal, st)));
-        reals.push(Math.round(toTWDGlobal(s.real, st)));
-        divs.push(Math.round(toTWDGlobal(s.div, st)));
-        retPcts.push(parseFloat((s.retPct*100).toFixed(2)));
-        colors.push(palette[i%palette.length]);
+        mlabels.push(st.name); mnames.push(st.code);
+        munreals.push(Math.round(toTWDChart(s.unreal, st)));
+        mreals.push(Math.round(toTWDChart(s.real, st)));
+        mdivs.push(Math.round(toTWDChart(s.div, st)));
+        mretPcts.push(parseFloat((s.retPct*100).toFixed(2)));
       });
-      var el=document.getElementById(obj.id);
+      allMktData.push({mkt:mkt, labels:mlabels, names:mnames, unreals:munreals, reals:mreals, divs:mdivs, retPcts:mretPcts});
+    });
+
+    // 只要任一市場超過5個就顯示按鈕
+    var maxCount = allMktData.reduce(function(m,d){ return Math.max(m,d.labels.length); }, 0);
+    var top5BtnHtml = makeTop5Btn(maxCount);
+    html = top5BtnHtml;
+
+    allMktData.forEach(function(d){
+      var cid='chart-'+d.mkt;
+      canvasIds.push(d);
+      d.canvasId = cid;
+      html+='<div class="chart-wrap"><div class="chart-title">'+d.mkt+'</div><div class="chart-canvas-wrap"><canvas id="'+cid+'"></canvas></div></div>';
+    });
+
+    document.getElementById('chart-area').innerHTML=html;
+    bindTop5Btns();
+
+    canvasIds.forEach(function(d){
+      var el=document.getElementById(d.canvasId);
       if (!el) return;
       var inst=null;
+
       if (curChartType==='pnl') {
-        var totals=unreals.map(function(u,i){return u+reals[i];});
-        inst=new Chart(el,{type:'bar',data:{labels:labels,names:names,datasets:[
-          {label:'未實現損益',data:unreals,backgroundColor:'rgba(61,142,240,0.7)',borderRadius:0,stack:'pnl',yAxisID:'y'},
-          {label:'已實現損益',data:reals,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:4,stack:'pnl',yAxisID:'y'},
-          {label:'報酬率',data:retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
+        var pD=applyTop5(d.labels,d.names,{unreals:d.unreals,reals:d.reals,retPcts:d.retPcts},
+          function(i){ return Math.abs(d.unreals[i]+d.reals[i]); },
+          function(others,key){ return key==='retPcts'?null:others.reduce(function(s,o){return s+o[key];},0); });
+        var totals=pD.unreals.map(function(u,i){return u+pD.reals[i];});
+        var unrealColors=pD.unreals.map(function(v){return v>=0?'rgba(61,142,240,0.7)':'rgba(255,92,92,0.7)';});
+        var realColors=pD.reals.map(function(v){return v>=0?'rgba(52,199,123,0.7)':'rgba(255,140,0,0.7)';});
+        inst=new Chart(el,{type:'bar',data:{labels:pD.labels,names:pD.names,datasets:[
+          {label:'未實現損益',data:pD.unreals,backgroundColor:unrealColors,borderRadius:0,stack:'pnl',yAxisID:'y'},
+          {label:'已實現損益',data:pD.reals,backgroundColor:realColors,borderRadius:4,stack:'pnl',yAxisID:'y'},
+          {label:'報酬率',data:pD.retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
         ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}},tooltip:{callbacks:{
           title:function(items){var i=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[i]:'';return code?(this.chart.data.labels[i]+' ('+code+')'):(this.chart.data.labels[i]);},
-          afterBody:function(items){var i=items[0].dataIndex;var t=totals[i];return['','合計損益: '+(t>=0?'+':'')+' $'+t.toLocaleString('zh-TW')];},
-          label:function(ctx){if(ctx.dataset.label==='報酬率') return '報酬率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%'; return ctx.dataset.label+': '+(ctx.parsed.y>=0?'+':'')+' $'+ctx.parsed.y.toLocaleString('zh-TW');}
+          afterBody:function(items){var i=items[0].dataIndex;var t=totals[i];return t!=null?['','合計損益: '+(t>=0?'+':'')+' $'+t.toLocaleString('zh-TW')]:[];},
+          label:function(ctx){if(ctx.dataset.label==='報酬率') return ctx.parsed.y!=null?'報酬率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%':'—'; return ctx.dataset.label+': '+(ctx.parsed.y>=0?'+':'')+' $'+ctx.parsed.y.toLocaleString('zh-TW');}
         }}},scales:{x:{ticks:{color:'#8899aa'},stacked:true},y:{ticks:{color:'#8899aa',callback:function(v){var a=Math.abs(v);return(v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW'));}},grid:{color:'#2a3d55'},stacked:true},y2:{position:'right',ticks:{color:'rgba(240,180,41,0.9)',callback:function(v){return(v>=0?'+':'')+v+'%';}},grid:{drawOnChartArea:false}}}}});
       } else if (curChartType==='dividend') {
-        inst=new Chart(el,{type:'bar',data:{labels:labels,codes:names,datasets:[{label:'股息收入',data:divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}});
+        var dvD=applyTop5(d.labels,d.names,{divs:d.divs},function(i){return d.divs[i];},
+          function(others,key){return others.reduce(function(s,o){return s+o[key];},0);});
+        inst=new Chart(el,{type:'bar',data:{labels:dvD.labels,codes:dvD.names,datasets:[{label:'股息收入',data:dvD.divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}});
       } else if (curChartType==='return') {
-        var bgc=retPcts.map(function(v){ return v>=0?'rgba(52,199,123,0.7)':'rgba(255,92,92,0.7)'; });
-        inst=new Chart(el,{type:'bar',data:{labels:labels,names:names,datasets:[{label:'報酬率 %',data:retPcts,backgroundColor:bgc,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[idx]:'';return code?(this.chart.data.labels[idx]+'('+code+')'):(this.chart.data.labels[idx]);},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}});
+        var bgc=d.retPcts.map(function(v){ return v>=0?'rgba(52,199,123,0.7)':'rgba(255,92,92,0.7)'; });
+        inst=new Chart(el,{type:'bar',data:{labels:d.labels,names:d.names,datasets:[{label:'報酬率 %',data:d.retPcts,backgroundColor:bgc,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.names?this.chart.data.names[idx]:'';return code?(this.chart.data.labels[idx]+'('+code+')'):(this.chart.data.labels[idx]);},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}});
       }
       if (inst) chartInstances.push(inst);
     });
@@ -1728,61 +1904,223 @@ function renderCharts() {
     var pr=getPrice(st.id),s=calc(st.id,pr);
     labels.push(st.name);
     names.push(st.code);
-    costs.push(Math.round(toTWDGlobal(s.mv||s.cost, st)));
-    unreals.push(Math.round(toTWDGlobal(s.unreal, st)));
-    reals.push(Math.round(toTWDGlobal(s.real, st)));
-    divs.push(Math.round(toTWDGlobal(s.div, st)));
+    costs.push(Math.round(toTWDChart(s.mv||s.cost, st)));
+    unreals.push(Math.round(toTWDChart(s.unreal, st)));
+    reals.push(Math.round(toTWDChart(s.real, st)));
+    divs.push(Math.round(toTWDChart(s.div, st)));
     retPcts.push(parseFloat((s.retPct*100).toFixed(2)));
     colors.push(palette[i%palette.length]);
   });
 
   var html='';
   if (curChartType==='allocation') {
-    // Market breakdown pie
-    var mktLabels=['台股','美股','基金'], mktCosts=[0,0,0];
-    filteredStocks.forEach(function(st){
-      var pr=getPrice(st.id),s=calc(st.id,pr);
-      var val=toTWDGlobal(s.mv||s.cost, st);
-      if(st.market==='台股') mktCosts[0]+=val;
-      else if(st.market==='美股') mktCosts[1]+=val;
-      else mktCosts[2]+=val;
-    });
-    mktCosts=mktCosts.map(Math.round);
-    var activeMkt=mktLabels.filter(function(_,i){return mktCosts[i]>0;});
-    var activeCosts=mktCosts.filter(function(v){return v>0;});
-    var mktColors=['#3d8ef0','#f0b429','#34c77b'];
-    var activeMktColors=mktColors.filter(function(_,i){return mktCosts[i]>0;});
+    // ── 子 tab UI ──────────────────────────────────────────
+    // 頂層是市場概覽時，不在 chart-area 內顯示子 tab（由頂層按鈕控制）
+    var allocTabHtml = '';
 
-    html='<div class="chart-wrap"><div class="chart-title">標的配置（市值）'+(curChartMarket!=='all'?' · '+curChartMarket:'')+'</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
-    document.getElementById('chart-area').innerHTML=html;
-        var allocPalette=['#3d8ef0','#5aa3ff','#2d6ebf','#1a4f8a','#7ab8f5','#0f3460','#4a90d9','#6baed6','#2171b5','#084594'];
-    var allocColors=filteredStocks.map(function(_,i){return allocPalette[i%allocPalette.length];});
-    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'doughnut',data:{labels:labels,codes:names,datasets:[{data:costs,backgroundColor:allocColors,borderWidth:2,borderColor:'#1a2840'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){var data=ctx.dataset.data||[];var total=data.reduce(function(a,b){return a+b;},0);var v=ctx.parsed||0;var pct=total?((v/total)*100).toFixed(1):'0.0';return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';}}}}}}));
+    if (curAllocTab === 'stocks') {
+      // ── 個股配置圓餅（含前5大切換）─────────────────────────
+      var allocPalette=['#3d8ef0','#5aa3ff','#2d6ebf','#1a4f8a','#7ab8f5','#0f3460','#4a90d9','#6baed6','#2171b5','#084594'];
+
+      // 前5大合併邏輯
+      var allocLabels=labels.slice(), allocNames=names.slice(), allocCosts=costs.slice();
+      if (allocTop5 && allocLabels.length > 5) {
+        // 依市值排序，取前5，其餘合併
+        var indexed = allocLabels.map(function(l,i){ return {label:l,name:allocNames[i],cost:allocCosts[i],i:i}; });
+        indexed.sort(function(a,b){ return b.cost-a.cost; });
+        var top5 = indexed.slice(0,5);
+        var others = indexed.slice(5);
+        var otherSum = others.reduce(function(s,x){ return s+x.cost; }, 0);
+        allocLabels = top5.map(function(x){ return x.label; });
+        allocNames  = top5.map(function(x){ return x.name; });
+        allocCosts  = top5.map(function(x){ return x.cost; });
+        if (otherSum > 0) {
+          allocLabels.push('其他 ('+others.length+'檔)');
+          allocNames.push('');
+          allocCosts.push(Math.round(otherSum));
+        }
+      }
+      var allocColors = allocLabels.map(function(l,i){
+        return l.startsWith('其他') ? '#556677' : allocPalette[i%allocPalette.length];
+      });
+
+      // 切換按鈕
+      var top5BtnHtml = labels.length > 5 ?
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">' +
+          '<button class="chart-tab'+(allocTop5?'':' active')+'" id="btn-alloc-all" style="padding:4px 12px;font-size:12px">全部</button>' +
+          '<button class="chart-tab'+(allocTop5?' active':'')+'" id="btn-alloc-top5" style="padding:4px 12px;font-size:12px">前5大</button>' +
+        '</div>' : '';
+
+      html = top5BtnHtml +
+        '<div class="chart-wrap">' +
+        '<div class="chart-title">標的配置（市值）'+(curChartMarket!=='all'?' · '+curChartMarket:'')+' <span style="font-size:10px;color:var(--text3);font-weight:400">TWD</span></div>' +
+        '<div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+      document.getElementById('chart-area').innerHTML = allocTabHtml + html;
+
+      // 綁定按鈕事件
+      var btnAll = document.getElementById('btn-alloc-all');
+      var btnTop = document.getElementById('btn-alloc-top5');
+      if (btnAll) btnAll.addEventListener('click', function(){ allocTop5=false; renderCharts(); });
+      if (btnTop) btnTop.addEventListener('click', function(){ allocTop5=true; renderCharts(); });
+
+      chartInstances.push(new Chart(document.getElementById('myChart'),{
+        type:'doughnut',
+        data:{labels:allocLabels,codes:allocNames,datasets:[{data:allocCosts,backgroundColor:allocColors,borderWidth:2,borderColor:'#1a2840'}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},tooltip:{callbacks:{
+          title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},
+          label:function(ctx){var data=ctx.dataset.data||[];var total=data.reduce(function(a,b){return a+b;},0);var v=ctx.parsed||0;var pct=total?((v/total)*100).toFixed(1):'0.0';return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';}
+        }}}}
+      }));
+
+    } else {
+      // ── 市場概覽（新增）────────────────────────────────────
+      var mktNames = ['台股','美股','基金'];
+      var mktColors3 = ['#3d8ef0','#f0b429','#34c77b'];
+      var mktData = mktNames.map(function(){ return {cost:0, mv:0, unreal:0, real:0, div:0}; });
+
+      marketStocks.forEach(function(st){
+        var pr=getPrice(st.id), s=calc(st.id,pr);
+        var idx3 = mktNames.indexOf(st.market);
+        if (idx3 < 0) return;
+        mktData[idx3].cost  += toTWDAlways(s.cost||0,  st);
+        mktData[idx3].mv    += toTWDAlways(s.mv||0,    st);
+        mktData[idx3].unreal+= toTWDAlways(s.unreal||0,st);
+        mktData[idx3].real  += toTWDAlways(s.real||0,  st);
+        mktData[idx3].div   += toTWDAlways(s.div||0,   st);
+      });
+
+      // 只保留有資料的市場
+      var activeMktIdx = mktNames.reduce(function(acc,_,i){ if(mktData[i].cost>0||mktData[i].mv>0) acc.push(i); return acc; },[]);
+      var aLabels  = activeMktIdx.map(function(i){return mktNames[i];});
+      var aColors  = activeMktIdx.map(function(i){return mktColors3[i];});
+      var aCosts   = activeMktIdx.map(function(i){return Math.round(mktData[i].cost);});
+      var aMvs     = activeMktIdx.map(function(i){return Math.round(mktData[i].mv);});
+      var aUnreals = activeMktIdx.map(function(i){return Math.round(mktData[i].unreal);});
+      var aReals   = activeMktIdx.map(function(i){return Math.round(mktData[i].real);});
+      var aDivs    = activeMktIdx.map(function(i){return Math.round(mktData[i].div);});
+
+      var fxNote = usdRate>0
+        ? '<span style="font-size:10px;color:var(--green);font-weight:400">💱 USD/TWD='+usdRate.toFixed(2)+'</span>'
+        : '<span style="font-size:10px;color:var(--gold);font-weight:400">⚠️ 匯率未取得</span>';
+
+      html =
+        // 圖1：配置圓餅
+        '<div class="chart-wrap">' +
+        '<div class="chart-title">市場配置（市值佔比） '+fxNote+'</div>' +
+        '<div class="chart-canvas-wrap"><canvas id="mktPie"></canvas></div></div>' +
+        // 圖2：投入 vs 市值
+        '<div class="chart-wrap">' +
+        '<div class="chart-title">投入成本 vs 市值</div>' +
+        '<div class="chart-canvas-wrap"><canvas id="mktBar"></canvas></div></div>' +
+        // 圖3：損益比較
+        '<div class="chart-wrap">' +
+        '<div class="chart-title">損益比較（未實現 / 已實現 / 配息）</div>' +
+        '<div class="chart-canvas-wrap"><canvas id="mktPnl"></canvas></div></div>';
+
+      document.getElementById('chart-area').innerHTML = allocTabHtml + html;
+
+      // 圖1 圓餅
+      chartInstances.push(new Chart(document.getElementById('mktPie'),{
+        type:'doughnut',
+        data:{labels:aLabels,datasets:[{data:aMvs,backgroundColor:aColors,borderWidth:2,borderColor:'#1a2840'}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{
+          legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},
+          tooltip:{callbacks:{label:function(ctx){
+            var total=aMvs.reduce(function(a,b){return a+b;},0);
+            var v=ctx.parsed||0;
+            var pct=total?((v/total)*100).toFixed(1):'0.0';
+            return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';
+          }}}
+        }}
+      }));
+
+      // 圖2 投入 vs 市值橫條
+      chartInstances.push(new Chart(document.getElementById('mktBar'),{
+        type:'bar',
+        data:{labels:aLabels,datasets:[
+          {label:'投入成本',data:aCosts,backgroundColor:'rgba(61,142,240,0.7)',borderRadius:4},
+          {label:'市值',    data:aMvs,  backgroundColor:'rgba(52,199,123,0.7)',borderRadius:4}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{labels:{color:'#e8f0fe',font:{size:12}}},
+            tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW');}}}},
+          scales:{
+            x:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}},
+            y:{ticks:{color:'#8899aa',callback:function(v){return '$'+(Math.abs(v)>=1000?Math.round(v/1000)+'K':v);}},grid:{color:'#2a3d55'}}
+          }
+        }
+      }));
+
+      // 圖3 損益比較橫條（堆疊）
+      chartInstances.push(new Chart(document.getElementById('mktPnl'),{
+        type:'bar',
+        data:{labels:aLabels,datasets:[
+          {label:'未實現損益',data:aUnreals,backgroundColor:aUnreals.map(function(v){return v>=0?'rgba(52,199,123,0.75)':'rgba(255,92,92,0.75)';}),borderRadius:4},
+          {label:'已實現損益',data:aReals,  backgroundColor:aReals.map(function(v){return v>=0?'rgba(90,163,255,0.75)':'rgba(255,140,92,0.75)';}),borderRadius:4},
+          {label:'配息',      data:aDivs,   backgroundColor:'rgba(240,180,41,0.75)',borderRadius:4}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{labels:{color:'#e8f0fe',font:{size:12}}},
+            tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW');}}}},
+          scales:{
+            x:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}},
+            y:{ticks:{color:'#8899aa',callback:function(v){return '$'+(Math.abs(v)>=1000?Math.round(v/1000)+'K':v);}},grid:{color:'#2a3d55'},stacked:false}
+          }
+        }
+      }));
+    }
+
+    // 子 tab 事件已移至頂層 setChartTopTab
   } else if (curChartType==='pnl') {
-    html='<div class="chart-wrap"><div class="chart-title">損益 & 報酬率</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+    // top5 依總損益絕對值排序（讓最大影響的標的排前面）
+    var pnlTop5Html = makeTop5Btn(labels.length);
+    var pnlD = applyTop5(
+      labels, names,
+      {unreals:unreals, reals:reals, retPcts:retPcts},
+      function(i){ return Math.abs(unreals[i]+reals[i]); },
+      function(others, key) {
+        if (key==='retPcts') return null; // 報酬率不合併
+        return others.reduce(function(s,o){ return s+o[key]; }, 0);
+      }
+    );
+    var totals=pnlD.unreals.map(function(u,i){return u+pnlD.reals[i];});
+    var unrealColors=pnlD.unreals.map(function(v){return v>=0?'rgba(61,142,240,0.7)':'rgba(255,92,92,0.7)';});
+    var realColors=pnlD.reals.map(function(v){return v>=0?'rgba(52,199,123,0.7)':'rgba(255,140,0,0.7)';});
+    html=pnlTop5Html+'<div class="chart-wrap"><div class="chart-title">損益 & 報酬率</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
-    var totals=unreals.map(function(u,i){return u+reals[i];});
-    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:labels,codes:names,datasets:[
-      {label:'未實現損益',data:unreals,backgroundColor:'rgba(61,142,240,0.7)',borderRadius:0,stack:'pnl',yAxisID:'y'},
-      {label:'已實現損益',data:reals,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:4,stack:'pnl',yAxisID:'y'},
-      {label:'報酬率',data:retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
+    bindTop5Btns();
+    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:pnlD.labels,codes:pnlD.names,datasets:[
+      {label:'未實現損益',data:pnlD.unreals,backgroundColor:unrealColors,borderRadius:0,stack:'pnl',yAxisID:'y'},
+      {label:'已實現損益',data:pnlD.reals,backgroundColor:realColors,borderRadius:4,stack:'pnl',yAxisID:'y'},
+      {label:'報酬率',data:pnlD.retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}},tooltip:{callbacks:{
       title:function(items){var i=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[i]:'';return code?(this.chart.data.labels[i]+' ('+code+')'):(this.chart.data.labels[i]);},
-      afterBody:function(items){var i=items[0].dataIndex;var t=totals[i];return['','合計損益: '+(t>=0?'+':'')+' $'+t.toLocaleString('zh-TW')];},
-      label:function(ctx){if(ctx.dataset.label==='報酬率') return '報酬率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%'; return ctx.dataset.label+': '+(ctx.parsed.y>=0?'+':'')+' $'+ctx.parsed.y.toLocaleString('zh-TW');}
+      afterBody:function(items){var i=items[0].dataIndex;var t=totals[i];return t!=null?['','合計損益: '+(t>=0?'+':'')+' $'+t.toLocaleString('zh-TW')]:[];},
+      label:function(ctx){if(ctx.dataset.label==='報酬率') return ctx.parsed.y!=null?'報酬率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%':'—'; return ctx.dataset.label+': '+(ctx.parsed.y>=0?'+':'')+' $'+ctx.parsed.y.toLocaleString('zh-TW');}
     }}},scales:{x:{ticks:{color:'#8899aa'},stacked:true},y:{ticks:{color:'#8899aa',callback:function(v){var a=Math.abs(v);return(v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW'));}},grid:{color:'#2a3d55'},stacked:true},y2:{position:'right',ticks:{color:'rgba(240,180,41,0.9)',callback:function(v){return(v>=0?'+':'')+v+'%';}},grid:{drawOnChartArea:false}}}}}));
+
   } else if (curChartType==='dividend') {
-    html='<div class="chart-wrap"><div class="chart-title">累計股息收入</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+    var divTop5Html = makeTop5Btn(labels.length);
+    var divD = applyTop5(labels, names, {divs:divs}, function(i){ return divs[i]; },
+      function(others, key){ return others.reduce(function(s,o){ return s+o[key]; }, 0); });
+    html=divTop5Html+'<div class="chart-wrap"><div class="chart-title">累計股息收入</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
-    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:names,codes:labels,datasets:[{label:'股息收入',data:divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}}));
+    bindTop5Btns();
+    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:divD.labels,codes:divD.names,datasets:[{label:'股息收入',data:divD.divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}}));
+
   } else if (curChartType==='return') {
     html='<div class="chart-wrap"><div class="chart-title">總報酬率（含股息）</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
     var bgColors=retPcts.map(function(v){ return v>=0?'rgba(52,199,123,0.7)':'rgba(255,92,92,0.7)'; });
     chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:names,codes:labels,datasets:[{label:'報酬率 %',data:retPcts,backgroundColor:bgColors,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}}));
+
     } else if (curChartType==='bubble') {
+    var bubbleTop5Html = makeTop5Btn(filteredStocks.filter(function(st){ var s=calc(st.id,getPrice(st.id)); return s.isFund?s.cost>0:s.cur>0; }).length);
     var html='<div class="chart-wrap">'+
-      '<div class="chart-title">持倉泡泡圖（限持有中標的）</div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+        '<div class="chart-title" style="margin-bottom:0">持倉泡泡圖（限持有中標的）</div>'+
+        (bubbleTop5Html ? bubbleTop5Html.replace('<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">','<div style="display:flex;gap:6px">') : '')+
+      '</div>'+
       '<div class="bubble-tabs">'+
         '<button class="bubble-tab'+(curBubbleTab==='pnl'?' active':'')+'" data-bubtab="pnl">累積損益</button>'+
         '<button class="bubble-tab'+(curBubbleTab==='day'?' active':'')+'" data-bubtab="day">單日變動</button>'+
@@ -1790,6 +2128,7 @@ function renderCharts() {
       '<div class="chart-canvas-wrap" style="height:360px"><canvas id="myChart"></canvas></div>'+
     '</div>';
     document.getElementById('chart-area').innerHTML=html;
+    bindTop5Btns();
     renderBubble(curBubbleTab);
     document.querySelectorAll('[data-bubtab]').forEach(function(btn){
       btn.addEventListener('click',function(){
@@ -1805,40 +2144,59 @@ function renderCharts() {
 // ── Import ─────────────────────────────────────────────────
 function parseCSV(text) {
   var lines=text.trim().split('\n'), rows=[];
-  // 判斷是新格式(12欄含fee/tax/sellCost)或舊格式(8欄)
-  var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim();}) : [];
-  var isNewFmt = header.length >= 11 || header.indexOf('賣出成本(每股)') !== -1;
+  var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');}) : [];
+
+  // header-based lookup（相容新/舊/含幣別格式）
+  function col(cols, name) {
+    var idx = header.indexOf(name);
+    return (idx !== -1 && idx < cols.length) ? cols[idx].trim().replace(/^"|"$/g,'') : '';
+  }
+  function colF(cols, name) { var v=col(cols,name); return v ? parseFloat(v) : null; }
+
+  var isNewFmt = header.indexOf('賣出成本(每股)') !== -1 || header.length >= 11;
+  var hasCurrencyCol = header.indexOf('幣別') !== -1;
+
   for (var i=1;i<lines.length;i++) {
     var cols=lines[i].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
-    if (cols.length<8||!cols[0]) continue;
+    if (!cols[0]) continue;
+
     var row;
-    if (isNewFmt) {
-      // 新格式: 日期,代號,名稱,市場,類型,股數,單價,手續費,交易稅,賣出成本(每股),總金額,備註
-      var sc = cols[9] ? parseFloat(cols[9]) : null;
+    if (hasCurrencyCol || isNewFmt) {
+      // header-based（新格式 / 含幣別欄）
+      var sc = colF(cols,'賣出成本(每股)');
       row = {
-        date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
-        market:cols[3]||'台股', type:cols[4],
-        shares:cols[5]?parseFloat(cols[5]):null,
-        price:cols[6]?parseFloat(cols[6]):null,
-        fee:cols[7]?parseFloat(cols[7]):0,
-        tax:cols[8]?parseFloat(cols[8]):0,
-        total:parseFloat(cols[10])||0,
-        note:cols[11]||''
+        date:   toDateInput(col(cols,'日期')),
+        code:   (col(cols,'標的代號')||'').toUpperCase(),
+        name:   col(cols,'標的名稱'),
+        market: col(cols,'市場')||'台股',
+        type:   col(cols,'類型'),
+        shares: colF(cols,'股數'),
+        price:  colF(cols,'單價'),
+        fee:    parseFloat(col(cols,'手續費'))||0,
+        tax:    parseFloat(col(cols,'交易稅'))||0,
+        total:  parseFloat(col(cols,'總金額'))||0,
+        note:   col(cols,'備註'),
       };
       if (sc !== null && !isNaN(sc) && sc > 0) row.sellCost = sc;
-      var slRaw = cols[12] ? cols[12].trim() : '';
+      var slRaw = col(cols,'賣出批次(JSON)');
       if (slRaw) { try { var sl=JSON.parse(slRaw); if(Array.isArray(sl)&&sl.length) row.sellLots=sl; } catch(e){} }
+      if (hasCurrencyCol) row.currency = col(cols,'幣別')||null;
     } else {
-      // 舊格式: 日期,代號,名稱,市場,類型,股數,單價,總金額,備註
+      // 舊格式（固定8欄，無 header）
+      if (cols.length < 8) continue;
       row = {
-        date:toDateInput(cols[0]), code:cols[1].toUpperCase(), name:cols[2],
-        market:cols[3]||'台股', type:cols[4],
-        shares:cols[5]?parseFloat(cols[5]):null,
-        price:cols[6]?parseFloat(cols[6]):null,
-        total:parseFloat(cols[7])||0,
-        note:cols[8]||''
+        date:   toDateInput(cols[0]),
+        code:   (cols[1]||'').toUpperCase(),
+        name:   cols[2],
+        market: cols[3]||'台股',
+        type:   cols[4],
+        shares: cols[5] ? parseFloat(cols[5]) : null,
+        price:  cols[6] ? parseFloat(cols[6]) : null,
+        total:  parseFloat(cols[7])||0,
+        note:   cols[8]||''
       };
     }
+    if (!row.code || !row.type) continue;
     rows.push(row);
   }
   return rows;
@@ -1850,7 +2208,7 @@ function showImportPreview(rows) {
   var html='<div class="import-card">' +
     '<div class="import-title">預覽（共 '+rows.length+' 筆）</div>' +
     '<div style="overflow-x:auto"><table class="preview-table"><tr>' +
-    '<th>日期</th><th>代號</th><th>名稱</th><th>市場</th><th>類型</th><th>股數</th><th>單價</th><th>手續費</th><th>交易稅</th><th>賣出成本/股</th><th>總金額</th><th>備註</th>' +
+    '<th>日期</th><th>代號</th><th>名稱</th><th>市場</th><th>幣別</th><th>類型</th><th>股數</th><th>單價</th><th>手續費</th><th>交易稅</th><th>賣出成本/股</th><th>總金額</th><th>備註</th>' +
     '</tr>';
   rows.slice(0,10).forEach(function(r){
     html+='<tr>' +
@@ -1858,6 +2216,7 @@ function showImportPreview(rows) {
       '<td>'+r.code+'</td>' +
       '<td>'+r.name+'</td>' +
       '<td>'+(r.market||'')+'</td>' +
+      '<td>'+(r.currency||'')+'</td>' +
       '<td>'+r.type+'</td>' +
       '<td>'+(r.shares!=null?r.shares:'')+'</td>' +
       '<td>'+(r.price!=null?r.price:'')+'</td>' +
@@ -1868,7 +2227,7 @@ function showImportPreview(rows) {
       '<td>'+(r.note||'')+'</td>' +
     '</tr>';
   });
-  if (rows.length>10) html+='<tr><td colspan="12" style="text-align:center;color:var(--text3)">…還有 '+(rows.length-10)+' 筆</td></tr>';
+  if (rows.length>10) html+='<tr><td colspan="13" style="text-align:center;color:var(--text3)">…還有 '+(rows.length-10)+' 筆</td></tr>';
   html+='</table></div>' +
     '<button class="btn-primary c-blue" id="btn-do-import" style="margin-top:16px">匯入 '+rows.length+' 筆資料</button>' +
     '<button class="btn-ghost" id="btn-cancel-import">取消</button>' +
@@ -1888,18 +2247,27 @@ async function doImport() {
   // Group by stock
   var stockMap={};
   importRows.forEach(function(r){
-    if (!stockMap[r.code]) stockMap[r.code]={code:r.code,name:r.name,market:r.market,txns:[]};
+    if (!stockMap[r.code]) stockMap[r.code]={code:r.code,name:r.name,market:r.market,currency:r.currency||null,txns:[]};
+    // 只要有任一筆帶幣別，就採用
+    if (r.currency && !stockMap[r.code].currency) stockMap[r.code].currency = r.currency;
     stockMap[r.code].txns.push({type:r.type,date:r.date,shares:r.shares,price:r.price,total:r.total,note:r.note,fee:0,tax:0});
   });
 
   for (var code in stockMap) {
     var sg=stockMap[code];
-    // Check if stock already exists
     var existing=stocks.find(function(s){return s.code===sg.code;});
     var sid;
-    if (existing) { sid=existing.id; }
-    else { sid=await addStockDb(sg.code,sg.name,sg.market); }
-    // Add transactions in batch
+    if (existing) {
+      sid=existing.id;
+      // 若匯入資料有幣別且現有標的未設定，補上
+      if (sg.market==='基金' && sg.currency && !existing.currency) {
+        await stocksRef().doc(sid).update({ currency: sg.currency });
+        existing.currency = sg.currency;
+      }
+    } else {
+      var currency = (sg.market==='基金' && sg.currency) ? sg.currency : null;
+      sid=await addStockDb(sg.code,sg.name,sg.market,currency);
+    }
     for (var j=0;j<sg.txns.length;j++) {
       await addTxDb(sid,sg.txns[j]);
     }
@@ -1910,7 +2278,6 @@ async function doImport() {
   fetchAllPrices();
   document.getElementById('import-preview').innerHTML='<div class="import-card"><div class="import-title" style="color:var(--green)">✅ 匯入完成！</div></div>';
   importRows=[];
-  // Switch to portfolio tab
   switchTab('portfolio');
 }
 
@@ -2313,11 +2680,12 @@ function downloadCSV(filename, rows) {
 }
 
 function exportTxCSV() {
-  var rows = [['日期','標的代號','標的名稱','市場','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)']];
+  var rows = [['日期','標的代號','標的名稱','市場','幣別','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)']];
   stocks.forEach(function(st){
     var list = (txns[st.id]||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var currency = st.market==='基金' ? (st.currency||'TWD') : (st.market==='美股' ? 'USD' : 'TWD');
     list.forEach(function(tx){
-      rows.push([tx.date, st.code, st.name, st.market, tx.type,
+      rows.push([tx.date, st.code, st.name, st.market, currency, tx.type,
         tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0,
         (tx.type==='賣出' && tx.sellCost!=null) ? tx.sellCost : '',
         tx.total, tx.note||'',
@@ -2329,14 +2697,16 @@ function exportTxCSV() {
 }
 
 function exportSummaryCSV() {
-  var rows = [['標的代號','標的名稱','市場','持股數','平均成本','總持倉成本','現價','市值','未實現損益','未實現報酬率','已實現損益','累計股息','總報酬']];
+  var rows = [['標的代號','標的名稱','市場','幣別','持股數/投入本金','平均成本','總持倉成本','現價/淨值','市值','未實現損益','未實現報酬率','已實現損益','累計股息/配息','總報酬']];
   stocks.forEach(function(st){
     var pr = getPrice(st.id), s = calc(st.id, pr);
     var tot = s.real + s.div + (pr>0 ? s.unreal : 0);
+    var isFund = st.market==='基金';
+    var currency = isFund ? (st.currency||'TWD') : (st.market==='美股' ? 'USD' : 'TWD');
     rows.push([
-      st.code, st.name, st.market,
-      Math.round(s.cur*100)/100,
-      Math.round(s.avg*100)/100,
+      st.code, st.name, st.market, currency,
+      isFund ? Math.round(s.cost) : (Math.round(s.cur*100)/100),  // 基金顯示投入本金
+      isFund ? '' : (Math.round(s.avg*100)/100),                   // 基金無均價
       Math.round(s.cost),
       pr || '',
       pr ? Math.round(s.mv) : '',
@@ -2398,15 +2768,34 @@ auth.onAuthStateChanged(async function(user) {
     document.getElementById('app').classList.add('ready');
     document.getElementById('user-name').textContent=user.displayName||user.email;
     if (user.photoURL) document.getElementById('user-avatar').src=user.photoURL;
-    setProgress(5, '驗證身份…');
-    await loadData();
-    setProgress(90, '渲染頁面…');
-    renderPortfolio();
-    setProgress(100, '完成！');
-    setTimeout(hideLoadingBar, 400);
-    fetchAllPrices();
+
+    var hasCached = loadLocalCache();
+    if (hasCached) {
+      // 有快取：直接顯示，loading bar 快速帶過
+      setProgress(80, '讀取本地快取…');
+      renderPortfolio();
+      setProgress(100, '完成！');
+      setTimeout(hideLoadingBar, 200);
+      // 背景靜默同步最新資料
+      document.getElementById('header-sub').textContent = '同步中…';
+      loadData().then(function() {
+        renderPortfolio();
+        document.getElementById('header-sub').textContent = '';
+        fetchAllPrices();
+      });
+    } else {
+      // 無快取：正常完整載入
+      setProgress(5, '驗證身份…');
+      await loadData();
+      setProgress(90, '渲染頁面…');
+      renderPortfolio();
+      setProgress(100, '完成！');
+      setTimeout(hideLoadingBar, 400);
+      fetchAllPrices();
+    }
   } else {
     uid=null; stocks=[]; txns={}; priceCache={};
+    clearLocalCache();
     hideLoadingBar();
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app').classList.remove('ready');
@@ -2433,9 +2822,30 @@ document.querySelectorAll('.chart-tab').forEach(function(btn){
     document.querySelectorAll('.chart-tab').forEach(function(b){ b.classList.remove('active'); });
     this.classList.add('active');
     curChartType=this.dataset.chart;
+    curAllocTab='market'; // 切子tab時重設
     renderCharts();
   });
 });
+
+// ── 頂層 tab：市場概覽 / 個股配置 ──────────────────────────
+var _topMarketBtn = document.getElementById('chart-top-market');
+var _topStocksBtn = document.getElementById('chart-top-stocks');
+var _stocksCtrl   = document.getElementById('chart-stocks-controls');
+
+function setChartTopTab(tab) {
+  // tab: 'market' | 'stocks'
+  _topMarketBtn.classList.toggle('active', tab==='market');
+  _topStocksBtn.classList.toggle('active', tab==='stocks');
+  _stocksCtrl.style.display = tab==='stocks' ? '' : 'none';
+  curChartTopTab = tab;
+  renderCharts();
+}
+
+if (_topMarketBtn) _topMarketBtn.addEventListener('click', function(){ setChartTopTab('market'); });
+if (_topStocksBtn) _topStocksBtn.addEventListener('click', function(){ setChartTopTab('stocks'); });
+
+// 初始化：預設個股配置，隱藏不需要的
+setChartTopTab('stocks');
 
 document.querySelectorAll('[data-chartfilter]').forEach(function(btn){
   btn.addEventListener('click',function(){
@@ -2560,14 +2970,14 @@ function renderWatchlistTable() {
     var pr = getPrice(st.id), s = calc(st.id, pr);
     var pc = priceCache[st.id] && priceCache[st.id].prevClose ? priceCache[st.id].prevClose : 0;
     var rawDayPnl = pc>0 ? (pr-pc)*s.cur : null;
-    var dayPnl = rawDayPnl!==null ? toTWDGlobal(rawDayPnl, st) : null;
+    var dayPnl = rawDayPnl!==null ? toTWDChart(rawDayPnl, st) : null;
     return {st:st, s:s, pr:pr, dayPnl:dayPnl, dayPct:pc>0?(pr-pc)/pc:null};
   });
   var totalCost=0, totalMv=0, totalUnreal=0, totalDayPnl=null;
   rows.forEach(function(r){
-    totalCost+=toTWDGlobal(r.s.cost||0, r.st);
-    totalMv+=toTWDGlobal(r.s.mv||0, r.st);
-    totalUnreal+=toTWDGlobal(r.s.unreal||0, r.st);
+    totalCost+=toTWDChart(r.s.cost||0, r.st);
+    totalMv+=toTWDChart(r.s.mv||0, r.st);
+    totalUnreal+=toTWDChart(r.s.unreal||0, r.st);
     if(r.dayPnl!==null) totalDayPnl=(totalDayPnl||0)+r.dayPnl;
   });
   var totalUnrPct = totalCost>0 ? totalUnreal/totalCost : null;
@@ -2579,11 +2989,11 @@ function renderWatchlistTable() {
   var cellFn = {
     shares:function(r){return fn(r.s.cur);},
     price: function(r){return '$'+fn(r.pr,2);},
-    cost:  function(r){return '$'+fn(Math.round(toTWDGlobal(r.s.cost, r.st)));},
-    mv:    function(r){return '$'+fn(Math.round(toTWDGlobal(r.s.mv, r.st)));},
+    cost:  function(r){return '$'+fn(Math.round(toTWDChart(r.s.cost, r.st)));},
+    mv:    function(r){return '$'+fn(Math.round(toTWDChart(r.s.mv, r.st)));},
     dayPnl:function(r){return fmtPnl(r.dayPnl);},
     dayPct:function(r){return fmtPct(r.dayPct);},
-    unreal:function(r){return fmtPnl(toTWDGlobal(r.s.unreal, r.st));},
+    unreal:function(r){return fmtPnl(toTWDChart(r.s.unreal, r.st));},
     unrPct:function(r){return fmtPct(r.s.unrPct);}
   };
   // 美股頁顯示 USD，其他頁已換算為 TWD
