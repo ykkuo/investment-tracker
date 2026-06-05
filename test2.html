@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -630,6 +630,7 @@ var curType = '買入';
 var curEditType = '買入';
 var curChartType = 'allocation';
 var curAllocTab = 'market'; // 'market' | 'stocks'
+var allocTop5 = false; // 個股配置是否只顯示前5大
 var curChartTopTab = 'stocks'; // 'market' | 'stocks'
 var curChartMarket = 'all';
 var curChartFilter = 'all';
@@ -1842,14 +1843,58 @@ function renderCharts() {
     var allocTabHtml = '';
 
     if (curAllocTab === 'stocks') {
-      // ── 個股配置圓餅（原有邏輯）─────────────────────────
-      html = '<div class="chart-wrap">' +
+      // ── 個股配置圓餅（含前5大切換）─────────────────────────
+      var allocPalette=['#3d8ef0','#5aa3ff','#2d6ebf','#1a4f8a','#7ab8f5','#0f3460','#4a90d9','#6baed6','#2171b5','#084594'];
+
+      // 前5大合併邏輯
+      var allocLabels=labels.slice(), allocNames=names.slice(), allocCosts=costs.slice();
+      if (allocTop5 && allocLabels.length > 5) {
+        // 依市值排序，取前5，其餘合併
+        var indexed = allocLabels.map(function(l,i){ return {label:l,name:allocNames[i],cost:allocCosts[i],i:i}; });
+        indexed.sort(function(a,b){ return b.cost-a.cost; });
+        var top5 = indexed.slice(0,5);
+        var others = indexed.slice(5);
+        var otherSum = others.reduce(function(s,x){ return s+x.cost; }, 0);
+        allocLabels = top5.map(function(x){ return x.label; });
+        allocNames  = top5.map(function(x){ return x.name; });
+        allocCosts  = top5.map(function(x){ return x.cost; });
+        if (otherSum > 0) {
+          allocLabels.push('其他 ('+others.length+'檔)');
+          allocNames.push('');
+          allocCosts.push(Math.round(otherSum));
+        }
+      }
+      var allocColors = allocLabels.map(function(l,i){
+        return l.startsWith('其他') ? '#556677' : allocPalette[i%allocPalette.length];
+      });
+
+      // 切換按鈕
+      var top5BtnHtml = labels.length > 5 ?
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">' +
+          '<button class="chart-tab'+(allocTop5?'':' active')+'" id="btn-alloc-all" style="padding:4px 12px;font-size:12px">全部</button>' +
+          '<button class="chart-tab'+(allocTop5?' active':'')+'" id="btn-alloc-top5" style="padding:4px 12px;font-size:12px">前5大</button>' +
+        '</div>' : '';
+
+      html = top5BtnHtml +
+        '<div class="chart-wrap">' +
         '<div class="chart-title">標的配置（市值）'+(curChartMarket!=='all'?' · '+curChartMarket:'')+' <span style="font-size:10px;color:var(--text3);font-weight:400">TWD</span></div>' +
         '<div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
       document.getElementById('chart-area').innerHTML = allocTabHtml + html;
-      var allocPalette=['#3d8ef0','#5aa3ff','#2d6ebf','#1a4f8a','#7ab8f5','#0f3460','#4a90d9','#6baed6','#2171b5','#084594'];
-      var allocColors=filteredStocks.map(function(_,i){return allocPalette[i%allocPalette.length];});
-      chartInstances.push(new Chart(document.getElementById('myChart'),{type:'doughnut',data:{labels:labels,codes:names,datasets:[{data:costs,backgroundColor:allocColors,borderWidth:2,borderColor:'#1a2840'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){var data=ctx.dataset.data||[];var total=data.reduce(function(a,b){return a+b;},0);var v=ctx.parsed||0;var pct=total?((v/total)*100).toFixed(1):'0.0';return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';}}}}}}));
+
+      // 綁定按鈕事件
+      var btnAll = document.getElementById('btn-alloc-all');
+      var btnTop = document.getElementById('btn-alloc-top5');
+      if (btnAll) btnAll.addEventListener('click', function(){ allocTop5=false; renderCharts(); });
+      if (btnTop) btnTop.addEventListener('click', function(){ allocTop5=true; renderCharts(); });
+
+      chartInstances.push(new Chart(document.getElementById('myChart'),{
+        type:'doughnut',
+        data:{labels:allocLabels,codes:allocNames,datasets:[{data:allocCosts,backgroundColor:allocColors,borderWidth:2,borderColor:'#1a2840'}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#e8f0fe',font:{size:12},padding:12}},tooltip:{callbacks:{
+          title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},
+          label:function(ctx){var data=ctx.dataset.data||[];var total=data.reduce(function(a,b){return a+b;},0);var v=ctx.parsed||0;var pct=total?((v/total)*100).toFixed(1):'0.0';return '市值: $'+v.toLocaleString('zh-TW')+' ('+pct+'%)';}
+        }}}}
+      }));
 
     } else {
       // ── 市場概覽（新增）────────────────────────────────────
