@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1519,6 +1519,56 @@ function renderDetail() {
   });
 }
 
+// ── Top5 helpers ───────────────────────────────────────────
+function makeTop5Btn(total) {
+  if (total <= 5) return '';
+  return '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">' +
+    '<button class="chart-tab'+(allocTop5?'':' active')+'" id="btn-alloc-all" style="padding:4px 12px;font-size:12px">全部</button>' +
+    '<button class="chart-tab'+(allocTop5?' active':'')+'" id="btn-alloc-top5" style="padding:4px 12px;font-size:12px">前5大</button>' +
+  '</div>';
+}
+
+function bindTop5Btns() {
+  var btnAll = document.getElementById('btn-alloc-all');
+  var btnTop = document.getElementById('btn-alloc-top5');
+  if (btnAll) btnAll.addEventListener('click', function(){ allocTop5=false; renderCharts(); });
+  if (btnTop) btnTop.addEventListener('click', function(){ allocTop5=true; renderCharts(); });
+}
+
+// arrays: {key: array, ...}，sortFn(i) 回傳排序值，mergeFn(others, key) 回傳合併值
+function applyTop5(labels, names, arrays, sortFn, mergeFn) {
+  var n = labels.length;
+  if (!allocTop5 || n <= 5) {
+    var result = {labels:labels, names:names};
+    Object.keys(arrays).forEach(function(k){ result[k]=arrays[k]; });
+    return result;
+  }
+  var indexed = labels.map(function(_,i){ return i; });
+  indexed.sort(function(a,b){ return sortFn(b)-sortFn(a); });
+  var top = indexed.slice(0,5);
+  var rest = indexed.slice(5);
+  var rLabels = top.map(function(i){ return labels[i]; });
+  var rNames  = top.map(function(i){ return names[i]; });
+  var rArrays = {};
+  Object.keys(arrays).forEach(function(k){
+    rArrays[k] = top.map(function(i){ return arrays[k][i]; });
+    var merged = mergeFn(rest.map(function(i){
+      var o={}; Object.keys(arrays).forEach(function(k2){ o[k2]=arrays[k2][i]; }); return o;
+    }), k);
+    if (merged !== null) {
+      rLabels.push('其他 ('+rest.length+'檔)');
+      rNames.push('');
+      rArrays[k].push(Math.round(merged));
+    }
+  });
+  // 避免 labels/names 被重複 push 多次
+  rLabels = rLabels.slice(0, top.length + 1);
+  rNames  = rNames.slice(0, top.length + 1);
+  var result = {labels:rLabels, names:rNames};
+  Object.keys(arrays).forEach(function(k){ result[k]=rArrays[k]; });
+  return result;
+}
+
 // ── Charts ─────────────────────────────────────────────────
 function renderBubble(tab) {
   chartInstances.forEach(function(c){if(c)c.destroy();}); chartInstances=[];
@@ -1567,6 +1617,15 @@ function renderBubble(tab) {
       isUSD: st.market==='基金' && st.currency==='USD'
     });
   });
+
+  // top5：依市值排序，只保留前5大（泡泡圖不合併「其他」，直接隱藏）
+  if (allocTop5 && bubbleData.length > 5) {
+    bubbleData.sort(function(a,b){ return b.mv-a.mv; });
+    bubbleData = bubbleData.slice(0,5);
+    // 重新計算 maxMv 和 r
+    var newMax = bubbleData.reduce(function(m,d){ return Math.max(m,d.mv); }, 1);
+    bubbleData.forEach(function(d){ d.r = Math.round(8+(40-8)*Math.sqrt(d.mv/newMax)); });
+  }
 
   var hasUSD = bubbleData.some(function(d){ return d.isUSD; });
   var fxNote = (hasUSD && usdRate) ? '（元，USD基金已換算）' : '（元）';
@@ -1996,32 +2055,55 @@ function renderCharts() {
 
     // 子 tab 事件已移至頂層 setChartTopTab
   } else if (curChartType==='pnl') {
-    html='<div class="chart-wrap"><div class="chart-title">損益 & 報酬率</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+    // top5 依總損益絕對值排序（讓最大影響的標的排前面）
+    var pnlTop5Html = makeTop5Btn(labels.length);
+    var pnlD = applyTop5(
+      labels, names,
+      {unreals:unreals, reals:reals, retPcts:retPcts},
+      function(i){ return Math.abs(unreals[i]+reals[i]); },
+      function(others, key) {
+        if (key==='retPcts') return null; // 報酬率不合併
+        return others.reduce(function(s,o){ return s+o[key]; }, 0);
+      }
+    );
+    var totals=pnlD.unreals.map(function(u,i){return u+pnlD.reals[i];});
+    var unrealColors=pnlD.unreals.map(function(v){return v>=0?'rgba(61,142,240,0.7)':'rgba(255,92,92,0.7)';});
+    var realColors=pnlD.reals.map(function(v){return v>=0?'rgba(52,199,123,0.7)':'rgba(255,140,0,0.7)';});
+    html=pnlTop5Html+'<div class="chart-wrap"><div class="chart-title">損益 & 報酬率</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
-    var totals=unreals.map(function(u,i){return u+reals[i];});
-    var unrealColors=unreals.map(function(v){return v>=0?'rgba(61,142,240,0.7)':'rgba(255,92,92,0.7)';});
-    var realColors=reals.map(function(v){return v>=0?'rgba(52,199,123,0.7)':'rgba(255,140,0,0.7)';});
-    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:labels,codes:names,datasets:[
-      {label:'未實現損益',data:unreals,backgroundColor:unrealColors,borderRadius:0,stack:'pnl',yAxisID:'y'},
-      {label:'已實現損益',data:reals,backgroundColor:realColors,borderRadius:4,stack:'pnl',yAxisID:'y'},
-      {label:'報酬率',data:retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
+    bindTop5Btns();
+    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:pnlD.labels,codes:pnlD.names,datasets:[
+      {label:'未實現損益',data:pnlD.unreals,backgroundColor:unrealColors,borderRadius:0,stack:'pnl',yAxisID:'y'},
+      {label:'已實現損益',data:pnlD.reals,backgroundColor:realColors,borderRadius:4,stack:'pnl',yAxisID:'y'},
+      {label:'報酬率',data:pnlD.retPcts,type:'line',borderColor:'rgba(240,180,41,1)',backgroundColor:'rgba(240,180,41,0.12)',borderWidth:2,pointRadius:4,pointBackgroundColor:'rgba(240,180,41,1)',fill:false,yAxisID:'y2'}
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8899aa'}},tooltip:{callbacks:{
       title:function(items){var i=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[i]:'';return code?(this.chart.data.labels[i]+' ('+code+')'):(this.chart.data.labels[i]);},
-      afterBody:function(items){var i=items[0].dataIndex;var t=totals[i];return['','合計損益: '+(t>=0?'+':'')+' $'+t.toLocaleString('zh-TW')];},
-      label:function(ctx){if(ctx.dataset.label==='報酬率') return '報酬率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%'; return ctx.dataset.label+': '+(ctx.parsed.y>=0?'+':'')+' $'+ctx.parsed.y.toLocaleString('zh-TW');}
+      afterBody:function(items){var i=items[0].dataIndex;var t=totals[i];return t!=null?['','合計損益: '+(t>=0?'+':'')+' $'+t.toLocaleString('zh-TW')]:[];},
+      label:function(ctx){if(ctx.dataset.label==='報酬率') return ctx.parsed.y!=null?'報酬率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%':'—'; return ctx.dataset.label+': '+(ctx.parsed.y>=0?'+':'')+' $'+ctx.parsed.y.toLocaleString('zh-TW');}
     }}},scales:{x:{ticks:{color:'#8899aa'},stacked:true},y:{ticks:{color:'#8899aa',callback:function(v){var a=Math.abs(v);return(v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW'));}},grid:{color:'#2a3d55'},stacked:true},y2:{position:'right',ticks:{color:'rgba(240,180,41,0.9)',callback:function(v){return(v>=0?'+':'')+v+'%';}},grid:{drawOnChartArea:false}}}}}));
+
   } else if (curChartType==='dividend') {
-    html='<div class="chart-wrap"><div class="chart-title">累計股息收入</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+    var divTop5Html = makeTop5Btn(labels.length);
+    var divD = applyTop5(labels, names, {divs:divs}, function(i){ return divs[i]; },
+      function(others, key){ return others.reduce(function(s,o){ return s+o[key]; }, 0); });
+    html=divTop5Html+'<div class="chart-wrap"><div class="chart-title">累計股息收入</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
-    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:names,codes:labels,datasets:[{label:'股息收入',data:divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}}));
+    bindTop5Btns();
+    chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:divD.names,codes:divD.labels,datasets:[{label:'股息收入',data:divD.divs,backgroundColor:'rgba(52,199,123,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return '$'+ctx.parsed.y.toLocaleString('zh-TW');}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa'},grid:{color:'#2a3d55'}}}}}));
+
   } else if (curChartType==='return') {
     html='<div class="chart-wrap"><div class="chart-title">總報酬率（含股息）</div><div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
     document.getElementById('chart-area').innerHTML=html;
     var bgColors=retPcts.map(function(v){ return v>=0?'rgba(52,199,123,0.7)':'rgba(255,92,92,0.7)'; });
     chartInstances.push(new Chart(document.getElementById('myChart'),{type:'bar',data:{labels:names,codes:labels,datasets:[{label:'報酬率 %',data:retPcts,backgroundColor:bgColors,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:function(items){var idx=items[0].dataIndex;var code=this.chart.data.codes?this.chart.data.codes[idx]:'';return this.chart.data.labels[idx]+(code?' ('+code+')':'');},label:function(ctx){return ctx.parsed.y+'%';}}}},scales:{x:{ticks:{color:'#8899aa'}},y:{ticks:{color:'#8899aa',callback:function(v){return v+'%'}},grid:{color:'#2a3d55'}}}}}));
+
     } else if (curChartType==='bubble') {
+    var bubbleTop5Html = makeTop5Btn(filteredStocks.filter(function(st){ var s=calc(st.id,getPrice(st.id)); return s.isFund?s.cost>0:s.cur>0; }).length);
     var html='<div class="chart-wrap">'+
-      '<div class="chart-title">持倉泡泡圖（限持有中標的）</div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+        '<div class="chart-title" style="margin-bottom:0">持倉泡泡圖（限持有中標的）</div>'+
+        (bubbleTop5Html ? bubbleTop5Html.replace('<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">','<div style="display:flex;gap:6px">') : '')+
+      '</div>'+
       '<div class="bubble-tabs">'+
         '<button class="bubble-tab'+(curBubbleTab==='pnl'?' active':'')+'" data-bubtab="pnl">累積損益</button>'+
         '<button class="bubble-tab'+(curBubbleTab==='day'?' active':'')+'" data-bubtab="day">單日變動</button>'+
@@ -2029,6 +2111,7 @@ function renderCharts() {
       '<div class="chart-canvas-wrap" style="height:360px"><canvas id="myChart"></canvas></div>'+
     '</div>';
     document.getElementById('chart-area').innerHTML=html;
+    bindTop5Btns();
     renderBubble(curBubbleTab);
     document.querySelectorAll('[data-bubtab]').forEach(function(btn){
       btn.addEventListener('click',function(){
