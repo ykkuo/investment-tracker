@@ -1799,6 +1799,10 @@ function syncChartFilterUi() {
 }
 
 function renderCharts() {
+  // allocation 圖不支援「全部」filter，自動 fallback 為 holding
+  if (curChartType === 'allocation' && curChartFilter === 'all') {
+    curChartFilter = 'holding';
+  }
   chartInstances.forEach(function(c){ if(c) c.destroy(); });
   chartInstances=[];
   if (curChartType==='bubble' && curChartFilter!=='holding') curChartFilter='holding';
