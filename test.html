@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b11</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b12</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -335,6 +335,7 @@ textarea.input{height:72px;resize:none}
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
         <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
+          <button class="filter-btn" data-chartfilter="all" style="display:none">全部</button>
           <button class="filter-btn active" data-chartfilter="holding">持有中</button>
           <button class="filter-btn" data-chartfilter="sold">已出清</button>
         </div>
@@ -1783,6 +1784,10 @@ function syncChartFilterUi() {
     curChartFilter = 'holding';
     if (btnAll) btnAll.style.display = 'none';
     if (btnSold) btnSold.style.display = 'none';
+    if (btnHolding) btnHolding.style.display = '';
+  } else if (curChartType === 'allocation') {
+    if (btnAll) btnAll.style.display = 'none';
+    if (btnSold) btnSold.style.display = '';
     if (btnHolding) btnHolding.style.display = '';
   } else {
     if (btnAll) btnAll.style.display = '';
