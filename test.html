@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b12</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b13</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1855,7 +1855,7 @@ function renderCharts() {
   var palette=['#3d8ef0','#34c77b','#f0b429','#9b72f5','#ff5c5c','#5aa3ff','#56d4a0','#ffd166','#ff9f43','#a29bfe'];
 
   // If showing all, group by market and render multiple charts
-  if (curChartMarket==='all' && curChartType!=='allocation' && curChartType!=='bubble') {
+  if (curChartMarket==='all' && curChartType!=='allocation' && curChartType!=='bubble' && curChartTopTab!=='stocks') {
     var markets=['台股','美股','基金'];
     var html='';
     var canvasIds=[];
