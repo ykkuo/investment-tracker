@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b9</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b11</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -335,8 +335,7 @@ textarea.input{height:72px;resize:none}
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
         <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
-          <button class="filter-btn active" data-chartfilter="all">全部</button>
-          <button class="filter-btn" data-chartfilter="holding">持有中</button>
+          <button class="filter-btn active" data-chartfilter="holding">持有中</button>
           <button class="filter-btn" data-chartfilter="sold">已出清</button>
         </div>
         <div class="chart-stock-picker" id="chart-stock-picker">
@@ -633,7 +632,7 @@ var curAllocTab = 'market'; // 'market' | 'stocks'
 var allocTop5 = false; // 個股配置是否只顯示前5大
 var curChartTopTab = 'stocks'; // 'market' | 'stocks'
 var curChartMarket = 'all';
-var curChartFilter = 'all';
+var curChartFilter = 'holding';
 var chartSelectedIds = null; // null = all selected
 var portfolioSelectedIds = (function(){ try{ return JSON.parse(localStorage.getItem('pf_stockPicker')||'null'); }catch(e){ return null; } })();
 var curBubbleTab = 'pnl';
@@ -1939,7 +1938,7 @@ function renderCharts() {
     var pr=getPrice(st.id),s=calc(st.id,pr);
     labels.push(st.name);
     names.push(st.code);
-    costs.push(Math.round(toTWDChart(curChartFilter==='sold' ? s.cost : (s.mv||s.cost), st)));
+    costs.push(Math.round(toTWDChart(curChartFilter==='sold' ? (s.realCost||s.cost||0) : (s.mv||s.cost), st)));
     unreals.push(Math.round(toTWDChart(s.unreal, st)));
     reals.push(Math.round(toTWDChart(s.real, st)));
     divs.push(Math.round(toTWDChart(s.div, st)));
