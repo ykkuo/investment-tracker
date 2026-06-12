@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b13</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b15</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1261,7 +1261,7 @@ function renderPortfolio() {
               '<div class="stat-box '+pbg(s.real+s.div)+'"><div class="stat-label">總報酬（含息）'+fundBadge+'</div><div class="stat-value '+pcls(s.real+s.div)+'">'+ps(s.real+s.div)+fc(s.real+s.div)+'</div></div>' +
             '</div>' :
             '<div class="price-row">' +
-              '<div class="price-label">目前淨值（手動輸入）'+(isUSDFund?' <span style="font-size:10px;color:var(--gold)">USD</span>':'')+'</div>' +
+              '<div class="price-label">目前市值（手動輸入）'+(isUSDFund?' <span style="font-size:10px;color:var(--gold)">USD</span>':'')+'</div>' +
               '<input class="price-input" type="text" inputmode="decimal" placeholder="輸入最新淨值" value="'+(priceCache[st.id]?priceCache[st.id].price:'')+'" data-pid="'+st.id+'">' +
             '</div>' +
             '<div class="stats-row">' +
@@ -1437,7 +1437,7 @@ function renderDetail() {
       (isUSDFund ? '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.25);border-radius:8px;padding:7px 10px;font-size:11px;color:var(--gold);margin-bottom:10px">💵 此基金以 USD 計價，所有金額以美元原幣顯示</div>' : '') +
       '<div class="info-row"><span class="info-label">累計投入本金'+fundCurrLabel+'</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
       (pr>0 ?
-        '<div class="info-row"><span class="info-label">目前淨值'+fundCurrLabel+'</span><span class="info-value">'+fc(pr)+'</span></div>' +
+        '<div class="info-row"><span class="info-label">目前市值'+fundCurrLabel+'</span><span class="info-value">'+fc(pr)+'</span></div>' +
         '<div class="info-row"><span class="info-label">未實現損益'+fundCurrLabel+'</span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>'
       : '') +
       '<div class="divider"></div>' +
@@ -1575,9 +1575,10 @@ function renderBubble(tab) {
   var el=document.getElementById('myChart');
   if(!el) return;
 
-  // 匯率換算helper（只針對USD基金）
+  // 匯率換算helper（USD基金 + 美股）
   function fxMv(val, st) {
     if (!usdRate) return val;
+    if (st.market==='美股') return val * usdRate;
     if (st.market==='基金' && st.currency==='USD') return val * usdRate;
     return val;
   }
@@ -1614,7 +1615,7 @@ function renderBubble(tab) {
       val:tab==='pnl'?unreal:dayChangeMv,
       pct:tab==='pnl'?s.unrPct*100:dayChangePct*100,
       isPos:isPos,
-      isUSD: st.market==='基金' && st.currency==='USD'
+      isUSD: st.market==='美股' || (st.market==='基金' && st.currency==='USD')
     });
   });
 
