@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b16</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b17</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1140,34 +1140,24 @@ function renderPortfolio() {
       '<div class="summary-label" style="margin-bottom:4px">目前總市值</div>' +
       '<div class="summary-main">'+fc(tm)+'</div>' +
       '<div style="height:1px;background:rgba(255,255,255,0.1);margin-bottom:12px"></div>' +
-      '<div class="summary-grid" style="margin-bottom:12px">' +
+      '<div class="summary-grid">' +
         '<div class="summary-item" style="padding-left:0">' +
           '<div class="summary-item-label">未實現損益</div>' +
           '<div class="summary-item-value '+pcls(tu)+'">'+ps(tu)+fc(tu)+'</div>' +
           '<div class="summary-item-sub '+pcls(tuPct)+'">'+fp(tuPct)+'</div>' +
+          '<div class="summary-item-sub muted">投入 '+fc(tc)+'</div>' +
         '</div>' +
         '<div class="summary-sep"></div>' +
         '<div class="summary-item">' +
           '<div class="summary-item-label">已實現損益</div>' +
           '<div class="summary-item-value '+pcls(tr)+'">'+ps(tr)+fc(tr)+'</div>' +
           '<div class="summary-item-sub '+pcls(totalRealPct)+'">'+fp(totalRealPct)+'</div>' +
+          '<div class="summary-item-sub muted">賣出 '+fc(totalRealCost)+'</div>' +
         '</div>' +
         '<div class="summary-sep"></div>' +
         '<div class="summary-item">' +
           '<div class="summary-item-label">股息</div>' +
           '<div class="summary-item-value green">'+fc(td)+'</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="height:1px;background:rgba(255,255,255,0.1);margin-bottom:12px"></div>' +
-      '<div class="summary-grid">' +
-        '<div class="summary-item" style="padding-left:0">' +
-          '<div class="summary-item-label">總投入成本</div>' +
-          '<div class="summary-item-value">'+fc(tc)+'</div>' +
-        '</div>' +
-        '<div class="summary-sep"></div>' +
-        '<div class="summary-item">' +
-          '<div class="summary-item-label">總賣出成本</div>' +
-          '<div class="summary-item-value">'+fc(totalRealCost)+'</div>' +
         '</div>' +
       '</div>' +
     '</div>';
