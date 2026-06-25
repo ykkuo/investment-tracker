@@ -1,0 +1,73 @@
+name: 新光證券每日自動匯入
+
+on:
+  schedule:
+    - cron: '30 8 * * 1-5'   # 台灣時間 16:30，週一到週五
+  workflow_dispatch:           # 允許手動觸發（測試用）
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: auto-import   # ← 所有步驟都在這個子資料夾執行
+
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 設定 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝套件
+        run: pip install pdfplumber pandas google-auth google-auth-oauthlib google-api-python-client firebase-admin
+
+      - name: 還原機密檔案
+        run: |
+          echo "${{ secrets.GMAIL_TOKEN }}"       | base64 -d > token.json
+          echo "${{ secrets.GMAIL_CREDENTIALS }}" | base64 -d > credentials.json
+          echo "${{ secrets.FIREBASE_SA }}"        | base64 -d > firebase_service_account.json
+
+      - name: 寫入設定
+        run: |
+          python - << 'PYEOF'
+          import re
+          with open('skis_auto_import.py', 'r', encoding='utf-8') as f:
+              content = f.read()
+          content = re.sub(r"PDF_PASSWORD\s*=\s*'.*?'",
+                           f"PDF_PASSWORD = '${{ secrets.PDF_PASSWORD }}'", content)
+          content = re.sub(r"FIREBASE_USER_UID\s*=\s*'.*?'",
+                           f"FIREBASE_USER_UID = '${{ secrets.FIREBASE_UID }}'", content)
+          with open('skis_auto_import.py', 'w', encoding='utf-8') as f:
+              f.write(content)
+          PYEOF
+
+      - name: 執行匯入
+        run: python skis_auto_import.py --auto 2>&1 | tee import_output.txt
+
+      - name: 上傳執行記錄
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: import-log-${{ github.run_id }}
+          path: |
+            auto-import/skis_csv/
+            auto-import/import_output.txt
+          retention-days: 30
+
+      - name: 通知成功
+        if: success()
+        run: |
+          RESULT=$(grep "完成！" import_output.txt || echo "執行完成")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="✅ 新光證券自動匯入 $(date '+%Y-%m-%d')%0A${RESULT}"
+
+      - name: 通知失敗
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="❌ 新光證券自動匯入失敗 $(date '+%Y-%m-%d')%0A請至 GitHub Actions 查看 log：https://github.com/${{ github.repository }}/actions"
