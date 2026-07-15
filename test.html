@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b17</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b18</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -648,6 +648,8 @@ var usdRateAt = '';   // 匯率時間戳
 
 var pfPickerOpen = false;
 var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
+var wlSortBy = localStorage.getItem('wl_sortBy') || 'code';
+var wlSortDir = localStorage.getItem('wl_sortDir') || 'asc';
 var WL_COL_DEFS = [
   {key:'shares', label:'股數'},
   {key:'price',  label:'現價'},
@@ -3023,6 +3025,33 @@ function renderWatchlistTable() {
     var dayPnl = rawDayPnl!==null ? toTWDChart(rawDayPnl, st) : null;
     return {st:st, s:s, pr:pr, dayPnl:dayPnl, dayPct:pc>0?(pr-pc)/pc:null};
   });
+  var sortValFn = {
+    code:   function(r){ return r.st.code; },
+    name:   function(r){ return r.st.name; },
+    shares: function(r){ return r.s.cur; },
+    price:  function(r){ return r.pr; },
+    cost:   function(r){ return toTWDChart(r.s.cost, r.st); },
+    mv:     function(r){ return toTWDChart(r.s.mv, r.st); },
+    dayPnl: function(r){ return r.dayPnl; },
+    dayPct: function(r){ return r.dayPct; },
+    unreal: function(r){ return toTWDChart(r.s.unreal, r.st); },
+    unrPct: function(r){ return r.s.unrPct; }
+  };
+  rows.sort(function(a,b){
+    var getV = sortValFn[wlSortBy] || sortValFn.code;
+    var va = getV(a), vb = getV(b);
+    var isStr = typeof va === 'string' || typeof vb === 'string';
+    if (isStr) {
+      va = va==null ? '' : String(va);
+      vb = vb==null ? '' : String(vb);
+      var cmp = va.localeCompare(vb, 'zh-Hant');
+      return wlSortDir==='asc' ? cmp : -cmp;
+    }
+    va = (va===null||va===undefined||isNaN(va)) ? -Infinity : va;
+    vb = (vb===null||vb===undefined||isNaN(vb)) ? -Infinity : vb;
+    var cmp2 = va - vb;
+    return wlSortDir==='asc' ? cmp2 : -cmp2;
+  });
   var totalCost=0, totalMv=0, totalUnreal=0, totalDayPnl=null;
   rows.forEach(function(r){
     totalCost+=toTWDChart(r.s.cost||0, r.st);
@@ -3048,12 +3077,13 @@ function renderWatchlistTable() {
   };
   // 美股頁顯示 USD，其他頁已換算為 TWD
   var currNote = showMarket==='美股' ? ' <span style="font-size:10px;color:var(--gold);font-weight:700">USD</span>' : '';
+  function sortArrow(key){ if(wlSortBy!==key) return ''; return wlSortDir==='asc' ? ' ▲' : ' ▼'; }
   var h='<div class="wl-scroll-wrap"><table class="wl-table"><thead><tr>';
-  h+='<th class="wl-sticky wl-col-code">代號</th><th class="wl-sticky wl-col-name">標的名稱</th>';
-  active.forEach(function(c){h+='<th style="text-align:right">'+c.label+'</th>';});
+  h+='<th class="wl-sticky wl-col-code" data-sort="code" style="cursor:pointer">代號'+sortArrow('code')+'</th><th class="wl-sticky wl-col-name" data-sort="name" style="cursor:pointer">標的名稱'+sortArrow('name')+'</th>';
+  active.forEach(function(c){h+='<th data-sort="'+c.key+'" style="text-align:right;cursor:pointer">'+c.label+sortArrow(c.key)+'</th>';});
   h+='</tr></thead><tbody>';
   rows.forEach(function(r){
-    h+='<tr><td class="wl-sticky wl-col-code"><span class="code-badge">'+r.st.code+'</span></td>';
+    h+='<tr class="wl-row" data-sid="'+r.st.id+'" style="cursor:pointer"><td class="wl-sticky wl-col-code"><span class="code-badge">'+r.st.code+'</span></td>';
     h+='<td class="wl-sticky wl-col-name">'+r.st.name+'</td>';
     active.forEach(function(c){h+='<td style="text-align:right">'+cellFn[c.key](r)+'</td>';});
     h+='</tr>';
@@ -3062,6 +3092,19 @@ function renderWatchlistTable() {
   active.forEach(function(c){h+='<td style="text-align:right">'+(totals[c.key]||'')+'</td>';});
   h+='</tr></tbody></table></div>';
   wrap.innerHTML = h;
+  wrap.querySelectorAll('.wl-row').forEach(function(tr){
+    tr.addEventListener('click', function(){ showDetail(this.dataset.sid); });
+  });
+  wrap.querySelectorAll('th[data-sort]').forEach(function(th){
+    th.addEventListener('click', function(){
+      var key = this.dataset.sort;
+      if (wlSortBy === key) { wlSortDir = wlSortDir==='asc' ? 'desc' : 'asc'; }
+      else { wlSortBy = key; wlSortDir = 'asc'; }
+      localStorage.setItem('wl_sortBy', wlSortBy);
+      localStorage.setItem('wl_sortDir', wlSortDir);
+      renderWatchlistTable();
+    });
+  });
 }
 
 function renderWatchlist() {
