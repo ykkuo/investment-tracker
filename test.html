@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v51b18</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v52a2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -3008,6 +3008,9 @@ function buildWlColPicker() {
 function renderWatchlistTable() {
   var wrap = document.getElementById('wl-table-wrap');
   if (!wrap) return;
+  var _prevScrollEl = wrap.querySelector('.wl-scroll-wrap');
+  var _scrollLeft = _prevScrollEl ? _prevScrollEl.scrollLeft : 0;
+  var _scrollTop = _prevScrollEl ? _prevScrollEl.scrollTop : 0;
   var holding = stocks.filter(function(st){
     if (calc(st.id, getPrice(st.id)).cur <= 0) return false;
     if (showMarket !== 'all' && st.market !== showMarket) return false;
@@ -3092,6 +3095,8 @@ function renderWatchlistTable() {
   active.forEach(function(c){h+='<td style="text-align:right">'+(totals[c.key]||'')+'</td>';});
   h+='</tr></tbody></table></div>';
   wrap.innerHTML = h;
+  var _newScrollEl = wrap.querySelector('.wl-scroll-wrap');
+  if (_newScrollEl) { _newScrollEl.scrollLeft = _scrollLeft; _newScrollEl.scrollTop = _scrollTop; }
   wrap.querySelectorAll('.wl-row').forEach(function(tr){
     tr.addEventListener('click', function(){ showDetail(this.dataset.sid); });
   });
