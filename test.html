@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1048,13 +1048,33 @@ function renderNetWorthChartUI(base) {
   var area = document.getElementById('chart-area');
   chartInstances.forEach(function(c){ if(c) c.destroy(); }); chartInstances=[];
 
+  var series = buildNetWorthSeriesFromBase(base, curNetWorthRange);
+  var twStock = series['台股'];
+  var usStock = series['美股'];
+  var cumulative = twStock.map(function(v,i){ return v + usStock[i]; });
+
+  var startTotal = cumulative[0];
+  var endTotal = cumulative[cumulative.length-1];
+  var diff = endTotal - startTotal;
+  var pct = startTotal > 0 ? diff/startTotal : null;
+  var startDate = fd(series.dates[0]);
+  var endDate = fd(series.dates[series.dates.length-1]);
+
   var rangeBtnsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">' +
     NETWORTH_RANGES.map(function(r){
       return '<button class="filter-btn'+(curNetWorthRange===r.key?' active':'')+'" data-nwrange="'+r.key+'">'+r.label+'</button>';
     }).join('') + '</div>';
 
+  var analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:14px 16px;flex-wrap:wrap">' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期初（'+startDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace">$'+fn(startTotal)+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期末（'+endDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace">$'+fn(endTotal)+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">差額</div><div style="font-size:15px;font-weight:700;font-family:monospace" class="'+pcls(diff)+'">'+ps(diff)+fc(diff)+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">漲跌幅</div><div style="font-size:15px;font-weight:700;font-family:monospace" class="'+(pct===null?'muted':pcls(pct))+'">'+(pct===null?'—':fp(pct))+'</div></div>' +
+  '</div>';
+
   area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢 <span style="font-size:10px;color:var(--text3);font-weight:400">每日歷史股價・累加顯示（最上層＝合計）</span></div>' +
     rangeBtnsHtml +
+    analysisHtml +
     '<div class="chart-canvas-wrap" style="height:340px"><canvas id="myChart"></canvas></div></div>';
 
   area.querySelectorAll('[data-nwrange]').forEach(function(btn){
@@ -1063,11 +1083,6 @@ function renderNetWorthChartUI(base) {
       renderNetWorthChartUI(base);
     });
   });
-
-  var series = buildNetWorthSeriesFromBase(base, curNetWorthRange);
-  var twStock = series['台股'];
-  var usStock = series['美股'];
-  var cumulative = twStock.map(function(v,i){ return v + usStock[i]; });
 
   var inst = new Chart(document.getElementById('myChart'), {
     type:'line',
