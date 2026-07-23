@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v52a2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -332,8 +332,9 @@ textarea.input{height:72px;resize:none}
         <button class="chart-tab" data-chart="pnl">損益</button>
         <button class="chart-tab" data-chart="dividend">配息</button>
         <button class="chart-tab" data-chart="bubble">泡泡</button>
+        <button class="chart-tab" data-chart="networth">淨值</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap" id="chart-secondary-row">
         <div class="filter-bar" id="chart-filter-bar" style="padding:0;margin:0">
           <button class="filter-btn" data-chartfilter="all" style="display:none">全部</button>
           <button class="filter-btn active" data-chartfilter="holding">持有中</button>
@@ -645,6 +646,8 @@ var sortBy = localStorage.getItem('pf_sortBy')||'recent';
 var sortDir = localStorage.getItem('pf_sortDir')||'asc';
 var usdRate = null;   // USD→TWD 匯率，null = 尚未抓到
 var usdRateAt = '';   // 匯率時間戳
+var histPriceCache = {}; // {sid: {dates:[...], prices:[...]}} 週線歷史股價快取（session內）
+var histFxCache = null;  // {dates:[...], prices:[...]} 週線歷史 USD/TWD 匯率快取
 
 var pfPickerOpen = false;
 var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
@@ -856,6 +859,207 @@ async function fetchAllPrices() {
   document.getElementById('header-sub').textContent = '價格已更新 ' + new Date().toLocaleTimeString('zh-TW') + ' (報價可能延遲)';
   renderPortfolio();
 }
+
+// ── 歷史淨值：週線歷史股價/匯率抓取 ──────────────────────────
+async function fetchHistPrices(sid, code, market) {
+  if (histPriceCache[sid] && histPriceCache[sid].dates.length) return histPriceCache[sid];
+  var tickers = [];
+  if (market === '台股') tickers = [code+'.TW', code+'.TWO'];
+  else tickers = [code, code+'.US'];
+  for (var i=0;i<tickers.length;i++) {
+    var ticker = tickers[i];
+    try {
+      const url = PROXY + encodeURIComponent(YF + ticker + '?interval=1wk&range=10y');
+      const ctrl = new AbortController();
+      const timer = setTimeout(function(){ctrl.abort();}, 12000);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const result = json && json.chart && json.chart.result && json.chart.result[0];
+      const ts = result && result.timestamp;
+      const closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
+      if (ts && closes && ts.length) {
+        var dates=[], prices=[];
+        for (var j=0;j<ts.length;j++) {
+          if (closes[j]==null) continue;
+          dates.push(new Date(ts[j]*1000).toISOString().slice(0,10));
+          prices.push(closes[j]);
+        }
+        if (dates.length) { histPriceCache[sid]={dates:dates,prices:prices}; return histPriceCache[sid]; }
+      }
+    } catch(e) { continue; }
+  }
+  histPriceCache[sid] = {dates:[], prices:[]};
+  return histPriceCache[sid];
+}
+
+async function fetchHistFx() {
+  if (histFxCache && histFxCache.dates.length) return histFxCache;
+  try {
+    const url = PROXY + encodeURIComponent(YF + 'USDTWD=X?interval=1wk&range=10y');
+    const ctrl = new AbortController();
+    const timer = setTimeout(function(){ctrl.abort();}, 12000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const json = await res.json();
+      const result = json && json.chart && json.chart.result && json.chart.result[0];
+      const ts = result && result.timestamp;
+      const closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
+      if (ts && closes) {
+        var dates=[], prices=[];
+        for (var i=0;i<ts.length;i++) {
+          if (closes[i]==null) continue;
+          dates.push(new Date(ts[i]*1000).toISOString().slice(0,10));
+          prices.push(closes[i]);
+        }
+        histFxCache = {dates:dates, prices:prices};
+        return histFxCache;
+      }
+    }
+  } catch(e) {}
+  histFxCache = {dates:[], prices:[]};
+  return histFxCache;
+}
+
+// 在已排序（依日期升冪）的 {dates,prices} 序列中，找到 <= dateStr 的最後一筆（forward-fill）
+function seriesValueAt(series, dateStr, fallback) {
+  if (!series || !series.dates || !series.dates.length) return fallback||0;
+  var lo=0, hi=series.dates.length-1, ans=-1;
+  while (lo<=hi) {
+    var mid=(lo+hi)>>1;
+    if (series.dates[mid] <= dateStr) { ans=mid; lo=mid+1; } else hi=mid-1;
+  }
+  if (ans===-1) return series.prices[0];
+  return series.prices[ans];
+}
+
+// 依交易紀錄，回推每個時間點的持股數/持倉成本（累積事件序列，供二分搜尋）
+function buildStockTimeline(sid) {
+  var list = (txns[sid]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return da>db?1:da<db?-1:0; });
+  var events=[], runShares=0, runCost=0;
+  list.forEach(function(t){
+    var d = normDate(t.date);
+    if (t.type==='買入'||t.type==='再投入') {
+      runShares += +(t.shares||0);
+      runCost += +(t.total||0);
+    } else if (t.type==='賣出') {
+      var avgNow = runShares>0 ? runCost/runShares : 0;
+      var costPerShare = (t.sellCost!=null && +t.sellCost>0) ? +t.sellCost : avgNow;
+      var sh = +(t.shares||0);
+      runShares -= sh;
+      runCost -= sh*costPerShare;
+      if (runShares<0) runShares=0;
+      if (runCost<0) runCost=0;
+    }
+    events.push({date:d, shares:runShares, cost:runCost});
+  });
+  return events;
+}
+function timelineValueAt(events, dateStr) {
+  if (!events || !events.length) return {shares:0, cost:0};
+  var lo=0, hi=events.length-1, ans=-1;
+  while (lo<=hi) {
+    var mid=(lo+hi)>>1;
+    if (events[mid].date <= dateStr) { ans=mid; lo=mid+1; } else hi=mid-1;
+  }
+  if (ans===-1) return {shares:0, cost:0};
+  return {shares:events[ans].shares, cost:events[ans].cost};
+}
+
+function buildWeeklyDateGrid(startDate, endDate) {
+  var dates=[];
+  var d = new Date(startDate+'T00:00:00');
+  var end = new Date(endDate+'T00:00:00');
+  while (d<=end) { dates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+7); }
+  if (dates[dates.length-1] !== endDate) dates.push(endDate);
+  return dates;
+}
+
+async function computeNetWorthSeries() {
+  var priceStocks = stocks.filter(function(st){ return st.market==='台股' || st.market==='美股'; });
+  if (!priceStocks.length) return null;
+  var earliest=null;
+  priceStocks.forEach(function(st){
+    (txns[st.id]||[]).forEach(function(t){
+      var d=normDate(t.date);
+      if (!earliest || d<earliest) earliest=d;
+    });
+  });
+  if (!earliest) return null;
+  var grid = buildWeeklyDateGrid(earliest, today());
+
+  var priceFetches = priceStocks.map(function(st){ return fetchHistPrices(st.id, st.code, st.market); });
+  var fxP = fetchHistFx();
+  await Promise.all(priceFetches);
+  var fx = await fxP;
+
+  var timelines={};
+  priceStocks.forEach(function(st){ timelines[st.id]=buildStockTimeline(st.id); });
+
+  var series = {dates:grid, '台股':[], '美股':[]};
+  grid.forEach(function(dateStr){
+    var sums = {'台股':0, '美股':0};
+    var fxRate = seriesValueAt(fx, dateStr, usdRate||32);
+    priceStocks.forEach(function(st){
+      var tl = timelineValueAt(timelines[st.id], dateStr);
+      var pr = seriesValueAt(histPriceCache[st.id], dateStr, 0);
+      var val = tl.shares * pr;
+      if (st.market==='美股') val = val*fxRate;
+      sums[st.market]+=val;
+    });
+    series['台股'].push(Math.round(sums['台股']));
+    series['美股'].push(Math.round(sums['美股']));
+  });
+  return series;
+}
+
+async function renderNetWorthChart() {
+  var area = document.getElementById('chart-area');
+  if (!area) return;
+  var reqToken = ++renderNetWorthChart._token;
+  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢</div>' +
+    '<div style="text-align:center;padding:48px 20px;color:var(--text2)"><span class="spinner"></span>　計算歷史淨值中…（首次載入需抓取歷史股價，較久）</div></div>';
+  var series;
+  try { series = await computeNetWorthSeries(); }
+  catch(e) { area.innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-msg">計算失敗</div><div class="empty-sub">'+e.message+'</div></div>'; return; }
+  if (reqToken !== renderNetWorthChart._token) return; // 使用者已切換頁籤，放棄結果
+  if (!series) { area.innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-msg">尚無台股/美股交易紀錄</div></div>'; return; }
+
+  chartInstances.forEach(function(c){ if(c) c.destroy(); }); chartInstances=[];
+  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢 <span style="font-size:10px;color:var(--text3);font-weight:400">週線歷史股價・僅台股/美股・點圖例可篩選市場</span></div>' +
+    '<div class="chart-canvas-wrap" style="height:340px"><canvas id="myChart"></canvas></div></div>';
+
+  var inst = new Chart(document.getElementById('myChart'), {
+    type:'line',
+    data:{
+      labels: series.dates,
+      datasets:[
+        {label:'台股', data:series['台股'], borderColor:'#3d8ef0', backgroundColor:'rgba(61,142,240,0.10)', fill:true, tension:0.15, pointRadius:0, borderWidth:2},
+        {label:'美股', data:series['美股'], borderColor:'#f0b429', backgroundColor:'rgba(240,180,41,0.10)', fill:true, tension:0.15, pointRadius:0, borderWidth:2}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12}},
+        tooltip:{callbacks:{
+          title:function(items){ return items[0].label; },
+          label:function(ctx){ return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW'); },
+          footer:function(items){ var t=items.reduce(function(s,i){return s+i.parsed.y;},0); return '合計: $'+Math.round(t).toLocaleString('zh-TW'); }
+        }}
+      },
+      scales:{
+        x:{ ticks:{color:'#8899aa', maxTicksLimit:8}, grid:{color:'#2a3d55'} },
+        y:{ ticks:{color:'#8899aa', callback:function(v){ var a=Math.abs(v); return (v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW')); }}, grid:{color:'#2a3d55'} }
+      }
+    }
+  });
+  chartInstances.push(inst);
+}
+renderNetWorthChart._token = 0;
 
 // ── Calc ───────────────────────────────────────────────────
 // ── getAvailableLots: 計算每筆買入批次的剩餘股數 ──────────────
@@ -1821,6 +2025,19 @@ function renderCharts() {
     // 個股配置：curAllocTab 固定為 'stocks'（不受市場概覽影響）
     curAllocTab='stocks';
   }
+
+  // 淨值走勢圖：獨立分支，不套用市場/持有篩選、標的篩選（走自己的 legend 篩選）
+  var secRow = document.getElementById('chart-secondary-row');
+  if (curChartType==='networth') {
+    if (secRow) secRow.style.display='none';
+    if (stocks.length===0) {
+      document.getElementById('chart-area').innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-msg">尚無資料</div></div>';
+      return;
+    }
+    renderNetWorthChart();
+    return;
+  }
+  if (secRow) secRow.style.display='';
 
   // Sync filter UI state
   syncChartFilterUi();
