@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -782,17 +782,20 @@ async function addTxDb(sid, tx) {
   const newTx = { id: ref.id, ...tx };
   if (!txns[sid]) txns[sid] = [];
   txns[sid].unshift(newTx);
+  netWorthBaseCache = null;
   return ref.id;
 }
 
 async function deleteTxDb(sid, txid) {
   await txnsRef(sid).doc(txid).delete();
   txns[sid] = txns[sid].filter(t => t.id !== txid);
+  netWorthBaseCache = null;
 }
 
 async function updateTxDb(sid, txid, data) {
   await txnsRef(sid).doc(txid).update(data);
   txns[sid] = txns[sid].map(t => t.id===txid ? {...t, ...data} : t);
+  netWorthBaseCache = null;
 }
 
 async function savePriceDb(sid, price) {
@@ -860,8 +863,8 @@ async function fetchAllPrices() {
   renderPortfolio();
 }
 
-// ── 歷史淨值：週線歷史股價/匯率抓取 ──────────────────────────
-async function fetchHistPrices(sid, code, market) {
+// ── 歷史淨值：每日歷史股價/匯率抓取（period1~period2） ──────
+async function fetchHistPrices(sid, code, market, period1, period2) {
   if (histPriceCache[sid] && histPriceCache[sid].dates.length) return histPriceCache[sid];
   var tickers = [];
   if (market === '台股') tickers = [code+'.TW', code+'.TWO'];
@@ -869,9 +872,9 @@ async function fetchHistPrices(sid, code, market) {
   for (var i=0;i<tickers.length;i++) {
     var ticker = tickers[i];
     try {
-      const url = PROXY + encodeURIComponent(YF + ticker + '?interval=1wk&range=10y');
+      const url = PROXY + encodeURIComponent(YF + ticker + '?interval=1d&period1='+period1+'&period2='+period2);
       const ctrl = new AbortController();
-      const timer = setTimeout(function(){ctrl.abort();}, 12000);
+      const timer = setTimeout(function(){ctrl.abort();}, 15000);
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (!res.ok) continue;
@@ -894,12 +897,12 @@ async function fetchHistPrices(sid, code, market) {
   return histPriceCache[sid];
 }
 
-async function fetchHistFx() {
+async function fetchHistFx(period1, period2) {
   if (histFxCache && histFxCache.dates.length) return histFxCache;
   try {
-    const url = PROXY + encodeURIComponent(YF + 'USDTWD=X?interval=1wk&range=10y');
+    const url = PROXY + encodeURIComponent(YF + 'USDTWD=X?interval=1d&period1='+period1+'&period2='+period2);
     const ctrl = new AbortController();
-    const timer = setTimeout(function(){ctrl.abort();}, 12000);
+    const timer = setTimeout(function(){ctrl.abort();}, 15000);
     const res = await fetch(url, { signal: ctrl.signal });
     clearTimeout(timer);
     if (res.ok) {
@@ -968,42 +971,43 @@ function timelineValueAt(events, dateStr) {
   return {shares:events[ans].shares, cost:events[ans].cost};
 }
 
-function buildWeeklyDateGrid(startDate, endDate) {
-  var dates=[];
-  var d = new Date(startDate+'T00:00:00');
-  var end = new Date(endDate+'T00:00:00');
-  while (d<=end) { dates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+7); }
-  if (dates[dates.length-1] !== endDate) dates.push(endDate);
-  return dates;
+var NETWORTH_RANGES = [
+  {key:'1w', label:'1週', days:7},
+  {key:'1m', label:'1月', days:30},
+  {key:'6m', label:'半年', days:182},
+  {key:'1y', label:'1年', days:365},
+  {key:'all', label:'全部', days:null}
+];
+var curNetWorthRange = '1y';
+var netWorthBaseCache = null; // {priceStocks, earliest, timelines, fx}
+
+function netWorthRangeCutoff(rangeKey, earliest, todayStr) {
+  var def = NETWORTH_RANGES.filter(function(r){ return r.key===rangeKey; })[0];
+  if (!def || def.days===null) return earliest;
+  var d = new Date(todayStr+'T00:00:00');
+  d.setDate(d.getDate()-def.days);
+  var cutoff = d.toISOString().slice(0,10);
+  return cutoff < earliest ? earliest : cutoff;
 }
 
-async function computeNetWorthSeries() {
-  var priceStocks = stocks.filter(function(st){ return st.market==='台股' || st.market==='美股'; });
-  if (!priceStocks.length) return null;
-  var earliest=null;
-  priceStocks.forEach(function(st){
-    (txns[st.id]||[]).forEach(function(t){
-      var d=normDate(t.date);
-      if (!earliest || d<earliest) earliest=d;
-    });
-  });
-  if (!earliest) return null;
-  var grid = buildWeeklyDateGrid(earliest, today());
-
-  var priceFetches = priceStocks.map(function(st){ return fetchHistPrices(st.id, st.code, st.market); });
-  var fxP = fetchHistFx();
-  await Promise.all(priceFetches);
-  var fx = await fxP;
-
-  var timelines={};
-  priceStocks.forEach(function(st){ timelines[st.id]=buildStockTimeline(st.id); });
+// 依基礎資料（已抓好的歷史股價/匯率/持股時間軸）＋所選期間，同步算出顯示用序列（不再打 API，很快）
+function buildNetWorthSeriesFromBase(base, rangeKey) {
+  var todayStr = today();
+  var cutoff = netWorthRangeCutoff(rangeKey, base.earliest, todayStr);
+  var totalDays = Math.max(1, Math.round((new Date(todayStr+'T00:00:00') - new Date(cutoff+'T00:00:00'))/86400000));
+  var step = Math.max(1, Math.round(totalDays/90));
+  var grid=[];
+  var d = new Date(cutoff+'T00:00:00');
+  var endD = new Date(todayStr+'T00:00:00');
+  while (d<=endD) { grid.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+step); }
+  if (grid[grid.length-1] !== todayStr) grid.push(todayStr);
 
   var series = {dates:grid, '台股':[], '美股':[]};
   grid.forEach(function(dateStr){
     var sums = {'台股':0, '美股':0};
-    var fxRate = seriesValueAt(fx, dateStr, usdRate||32);
-    priceStocks.forEach(function(st){
-      var tl = timelineValueAt(timelines[st.id], dateStr);
+    var fxRate = seriesValueAt(base.fx, dateStr, usdRate||32);
+    base.priceStocks.forEach(function(st){
+      var tl = timelineValueAt(base.timelines[st.id], dateStr);
       var pr = seriesValueAt(histPriceCache[st.id], dateStr, 0);
       var val = tl.shares * pr;
       if (st.market==='美股') val = val*fxRate;
@@ -1015,29 +1019,63 @@ async function computeNetWorthSeries() {
   return series;
 }
 
-async function renderNetWorthChart() {
-  var area = document.getElementById('chart-area');
-  if (!area) return;
-  var reqToken = ++renderNetWorthChart._token;
-  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢</div>' +
-    '<div style="text-align:center;padding:48px 20px;color:var(--text2)"><span class="spinner"></span>　計算歷史淨值中…（首次載入需抓取歷史股價，較久）</div></div>';
-  var series;
-  try { series = await computeNetWorthSeries(); }
-  catch(e) { area.innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-msg">計算失敗</div><div class="empty-sub">'+e.message+'</div></div>'; return; }
-  if (reqToken !== renderNetWorthChart._token) return; // 使用者已切換頁籤，放棄結果
-  if (!series) { area.innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-msg">尚無台股/美股交易紀錄</div></div>'; return; }
+async function computeNetWorthBase() {
+  var priceStocks = stocks.filter(function(st){ return st.market==='台股' || st.market==='美股'; });
+  if (!priceStocks.length) return null;
+  var earliest=null;
+  priceStocks.forEach(function(st){
+    (txns[st.id]||[]).forEach(function(t){
+      var d=normDate(t.date);
+      if (!earliest || d<earliest) earliest=d;
+    });
+  });
+  if (!earliest) return null;
+  var period1 = Math.floor(new Date(earliest+'T00:00:00Z').getTime()/1000);
+  var period2 = Math.floor(Date.now()/1000)+86400;
 
+  var priceFetches = priceStocks.map(function(st){ return fetchHistPrices(st.id, st.code, st.market, period1, period2); });
+  var fxP = fetchHistFx(period1, period2);
+  await Promise.all(priceFetches);
+  var fx = await fxP;
+
+  var timelines={};
+  priceStocks.forEach(function(st){ timelines[st.id]=buildStockTimeline(st.id); });
+
+  return {priceStocks:priceStocks, earliest:earliest, timelines:timelines, fx:fx};
+}
+
+function renderNetWorthChartUI(base) {
+  var area = document.getElementById('chart-area');
   chartInstances.forEach(function(c){ if(c) c.destroy(); }); chartInstances=[];
-  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢 <span style="font-size:10px;color:var(--text3);font-weight:400">週線歷史股價・僅台股/美股・點圖例可篩選市場</span></div>' +
+
+  var rangeBtnsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">' +
+    NETWORTH_RANGES.map(function(r){
+      return '<button class="filter-btn'+(curNetWorthRange===r.key?' active':'')+'" data-nwrange="'+r.key+'">'+r.label+'</button>';
+    }).join('') + '</div>';
+
+  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢 <span style="font-size:10px;color:var(--text3);font-weight:400">每日歷史股價・累加顯示（最上層＝合計）</span></div>' +
+    rangeBtnsHtml +
     '<div class="chart-canvas-wrap" style="height:340px"><canvas id="myChart"></canvas></div></div>';
+
+  area.querySelectorAll('[data-nwrange]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      curNetWorthRange = this.dataset.nwrange;
+      renderNetWorthChartUI(base);
+    });
+  });
+
+  var series = buildNetWorthSeriesFromBase(base, curNetWorthRange);
+  var twStock = series['台股'];
+  var usStock = series['美股'];
+  var cumulative = twStock.map(function(v,i){ return v + usStock[i]; });
 
   var inst = new Chart(document.getElementById('myChart'), {
     type:'line',
     data:{
       labels: series.dates,
       datasets:[
-        {label:'台股', data:series['台股'], borderColor:'#3d8ef0', backgroundColor:'rgba(61,142,240,0.10)', fill:true, tension:0.15, pointRadius:0, borderWidth:2},
-        {label:'美股', data:series['美股'], borderColor:'#f0b429', backgroundColor:'rgba(240,180,41,0.10)', fill:true, tension:0.15, pointRadius:0, borderWidth:2}
+        {label:'台股', data:twStock, borderColor:'#3d8ef0', backgroundColor:'rgba(61,142,240,0.25)', fill:'origin', tension:0.15, pointRadius:0, borderWidth:2},
+        {label:'美股（累加至合計）', data:cumulative, _raw:usStock, borderColor:'#f0b429', backgroundColor:'rgba(240,180,41,0.25)', fill:0, tension:0.15, pointRadius:0, borderWidth:2}
       ]
     },
     options:{
@@ -1047,8 +1085,16 @@ async function renderNetWorthChart() {
         legend:{position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12}},
         tooltip:{callbacks:{
           title:function(items){ return items[0].label; },
-          label:function(ctx){ return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW'); },
-          footer:function(items){ var t=items.reduce(function(s,i){return s+i.parsed.y;},0); return '合計: $'+Math.round(t).toLocaleString('zh-TW'); }
+          label:function(ctx){
+            if (ctx.datasetIndex===0) return '台股: $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW');
+            var raw = ctx.dataset._raw[ctx.dataIndex];
+            return '美股: $'+Math.round(raw).toLocaleString('zh-TW');
+          },
+          footer:function(items){
+            var totalItem = items.filter(function(i){return i.datasetIndex===1;})[0];
+            var t = totalItem ? totalItem.parsed.y : items.reduce(function(s,i){return s+i.parsed.y;},0);
+            return '合計: $'+Math.round(t).toLocaleString('zh-TW');
+          }
         }}
       },
       scales:{
@@ -1058,6 +1104,21 @@ async function renderNetWorthChart() {
     }
   });
   chartInstances.push(inst);
+}
+
+async function renderNetWorthChart() {
+  var area = document.getElementById('chart-area');
+  if (!area) return;
+  var reqToken = ++renderNetWorthChart._token;
+  if (!netWorthBaseCache) {
+    area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢</div>' +
+      '<div style="text-align:center;padding:48px 20px;color:var(--text2)"><span class="spinner"></span>　抓取歷史股價中…（首次載入較久，之後切換期間會很快）</div></div>';
+    try { netWorthBaseCache = await computeNetWorthBase(); }
+    catch(e) { area.innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-msg">計算失敗</div><div class="empty-sub">'+e.message+'</div></div>'; return; }
+  }
+  if (reqToken !== renderNetWorthChart._token) return; // 使用者已切換頁籤，放棄結果
+  if (!netWorthBaseCache) { area.innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-msg">尚無台股/美股交易紀錄</div></div>'; return; }
+  renderNetWorthChartUI(netWorthBaseCache);
 }
 renderNetWorthChart._token = 0;
 
@@ -3000,6 +3061,7 @@ async function clearAllData() {
     await deleteStockDb(allIds[i]);
   }
   stocks=[]; txns={}; priceCache={};
+  netWorthBaseCache = null;
   btn.textContent = '清除全部資料'; btn.disabled = false;
   renderPortfolio();
   alert('已清除所有資料！');
