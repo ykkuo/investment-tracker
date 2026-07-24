@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a4</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a5</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1048,50 +1048,26 @@ function renderNetWorthChartUI(base) {
   var area = document.getElementById('chart-area');
   chartInstances.forEach(function(c){ if(c) c.destroy(); }); chartInstances=[];
 
-  var mkt = curChartMarket; // 'all' | '台股' | '美股' | '基金'
   var rangeBtnsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">' +
     NETWORTH_RANGES.map(function(r){
       return '<button class="filter-btn'+(curNetWorthRange===r.key?' active':'')+'" data-nwrange="'+r.key+'">'+r.label+'</button>';
     }).join('') + '</div>';
 
-  if (mkt === '基金') {
-    area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢</div>' + rangeBtnsHtml +
-      '<div class="empty-state" style="padding:32px 16px"><div class="empty-icon">📈</div><div class="empty-msg">淨值走勢僅支援台股／美股</div><div class="empty-sub">基金沒有歷史淨值資料，請切換上方市場篩選</div></div></div>';
-    area.querySelectorAll('[data-nwrange]').forEach(function(btn){
-      btn.addEventListener('click', function(){ curNetWorthRange=this.dataset.nwrange; renderNetWorthChartUI(base); });
-    });
-    return;
-  }
-
   var series = buildNetWorthSeriesFromBase(base, curNetWorthRange);
   var twStock = series['台股'];
   var usStock = series['美股'];
-  var showTW = mkt==='all' || mkt==='台股';
-  var showUS = mkt==='all' || mkt==='美股';
-  var stacked = showTW && showUS;
-
-  var cumulative;
-  if (stacked) cumulative = twStock.map(function(v,i){ return v + usStock[i]; });
-  else if (showTW) cumulative = twStock.slice();
-  else cumulative = usStock.slice();
-
-  var startTotal = cumulative[0];
-  var endTotal = cumulative[cumulative.length-1];
-  var diff = endTotal - startTotal;
-  var pct = startTotal > 0 ? diff/startTotal : null;
+  var cumulative = twStock.map(function(v,i){ return v + usStock[i]; });
   var startDate = fd(series.dates[0]);
   var endDate = fd(series.dates[series.dates.length-1]);
-  var scopeLabel = stacked ? '（台股＋美股）' : showTW ? '（台股）' : '（美股）';
 
   var analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:14px 16px;flex-wrap:wrap">' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期初（'+startDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace">$'+fn(startTotal)+'</div></div>' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期末（'+endDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace">$'+fn(endTotal)+'</div></div>' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">差額</div><div style="font-size:15px;font-weight:700;font-family:monospace" class="'+pcls(diff)+'">'+ps(diff)+fc(diff)+'</div></div>' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">漲跌幅</div><div style="font-size:15px;font-weight:700;font-family:monospace" class="'+(pct===null?'muted':pcls(pct))+'">'+(pct===null?'—':fp(pct))+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期初（'+startDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-start-val">—</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期末（'+endDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-end-val">—</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">差額</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-diff-val">—</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">漲跌幅</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-pct-val">—</div></div>' +
   '</div>';
 
-  var subtitle = stacked ? '每日歷史股價・累加顯示（最上層＝合計）' : '每日歷史股價・單一市場篩選中';
-  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢'+scopeLabel+' <span style="font-size:10px;color:var(--text3);font-weight:400">'+subtitle+'</span></div>' +
+  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢 <span id="nw-scope-label" style="font-size:10px;color:var(--text3);font-weight:400">每日歷史股價・累加顯示（最上層＝合計）・點下方圖例可篩選市場</span></div>' +
     rangeBtnsHtml +
     analysisHtml +
     '<div class="chart-canvas-wrap" style="height:340px"><canvas id="myChart"></canvas></div></div>';
@@ -1103,15 +1079,41 @@ function renderNetWorthChartUI(base) {
     });
   });
 
-  var datasets = [];
-  if (showTW) {
-    datasets.push({label:'台股', data:twStock, borderColor:'#3d8ef0', backgroundColor:'rgba(61,142,240,0.25)', fill:'origin', tension:0.15, pointRadius:0, borderWidth:2});
+  // 依目前圖例可見狀態（台股/美股）更新期初/期末/差額/漲跌幅
+  function updateAnalysis(twVisible, usVisible) {
+    var arr;
+    var scopeText;
+    if (twVisible && usVisible) { arr = cumulative; scopeText = '每日歷史股價・累加顯示（最上層＝合計）・點下方圖例可篩選市場'; }
+    else if (twVisible) { arr = twStock; scopeText = '每日歷史股價・目前僅顯示台股・點圖例可切換'; }
+    else if (usVisible) { arr = usStock; scopeText = '每日歷史股價・目前僅顯示美股・點圖例可切換'; }
+    else { arr = null; scopeText = '每日歷史股價・目前無顯示中的市場・點圖例可切換'; }
+
+    var scopeEl = document.getElementById('nw-scope-label');
+    if (scopeEl) scopeEl.textContent = scopeText;
+
+    var startEl=document.getElementById('nw-start-val'), endEl=document.getElementById('nw-end-val'),
+        diffEl=document.getElementById('nw-diff-val'), pctEl=document.getElementById('nw-pct-val');
+    if (!arr) {
+      if(startEl){startEl.textContent='—';startEl.className='';}
+      if(endEl){endEl.textContent='—';endEl.className='';}
+      if(diffEl){diffEl.textContent='—';diffEl.className='';}
+      if(pctEl){pctEl.textContent='—';pctEl.className='';}
+      return;
+    }
+    var startTotal=arr[0], endTotal=arr[arr.length-1], diff=endTotal-startTotal;
+    var pct = startTotal>0 ? diff/startTotal : null;
+    if(startEl) startEl.textContent = '$'+fn(startTotal);
+    if(endEl) endEl.textContent = '$'+fn(endTotal);
+    if(diffEl){ diffEl.textContent = ps(diff)+fc(diff); diffEl.className=pcls(diff); diffEl.style.fontFamily='monospace'; diffEl.style.fontWeight='700'; diffEl.style.fontSize='15px'; }
+    if(pctEl){ pctEl.textContent = pct===null?'—':fp(pct); pctEl.className=pct===null?'muted':pcls(pct); pctEl.style.fontFamily='monospace'; pctEl.style.fontWeight='700'; pctEl.style.fontSize='15px'; }
+    if(startEl){ startEl.style.fontFamily='monospace'; startEl.style.fontWeight='700'; startEl.style.fontSize='15px'; }
+    if(endEl){ endEl.style.fontFamily='monospace'; endEl.style.fontWeight='700'; endEl.style.fontSize='15px'; }
   }
-  if (stacked) {
-    datasets.push({label:'美股（累加至合計）', data:cumulative, _raw:usStock, borderColor:'#f0b429', backgroundColor:'rgba(240,180,41,0.25)', fill:0, tension:0.15, pointRadius:0, borderWidth:2});
-  } else if (showUS) {
-    datasets.push({label:'美股', data:usStock, borderColor:'#f0b429', backgroundColor:'rgba(240,180,41,0.25)', fill:'origin', tension:0.15, pointRadius:0, borderWidth:2});
-  }
+
+  var datasets = [
+    {label:'台股', data:twStock, borderColor:'#3d8ef0', backgroundColor:'rgba(61,142,240,0.25)', fill:'origin', tension:0.15, pointRadius:0, borderWidth:2},
+    {label:'美股（累加至合計）', data:cumulative, _raw:usStock, borderColor:'#f0b429', backgroundColor:'rgba(240,180,41,0.25)', fill:0, tension:0.15, pointRadius:0, borderWidth:2}
+  ];
 
   var inst = new Chart(document.getElementById('myChart'), {
     type:'line',
@@ -1123,7 +1125,30 @@ function renderNetWorthChartUI(base) {
       responsive:true, maintainAspectRatio:false,
       interaction:{mode:'index', intersect:false},
       plugins:{
-        legend:{position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12}},
+        legend:{
+          position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12},
+          onClick: function(e, legendItem, legend) {
+            var ci = legend.chart;
+            var idx = legendItem.datasetIndex;
+            if (ci.isDatasetVisible(idx)) ci.hide(idx); else ci.show(idx);
+            var twVisible = ci.isDatasetVisible(0);
+            var usVisible = ci.isDatasetVisible(1);
+            // 依可見狀態重新決定第二條線要不要疊加
+            if (twVisible && usVisible) {
+              ci.data.datasets[1].data = cumulative;
+              ci.data.datasets[1]._raw = usStock;
+              ci.data.datasets[1].fill = 0;
+              ci.data.datasets[1].label = '美股（累加至合計）';
+            } else if (usVisible) {
+              ci.data.datasets[1].data = usStock;
+              ci.data.datasets[1]._raw = null;
+              ci.data.datasets[1].fill = 'origin';
+              ci.data.datasets[1].label = '美股';
+            }
+            ci.update();
+            updateAnalysis(twVisible, usVisible);
+          }
+        },
         tooltip:{callbacks:{
           title:function(items){ return items[0].label; },
           label:function(ctx){
@@ -1144,6 +1169,7 @@ function renderNetWorthChartUI(base) {
     }
   });
   chartInstances.push(inst);
+  updateAnalysis(true, true);
 }
 
 async function renderNetWorthChart() {
