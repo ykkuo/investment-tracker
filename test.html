@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53b1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53c1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -332,6 +332,7 @@ textarea.input{height:72px;resize:none}
         <button class="chart-tab" data-chart="pnl">損益</button>
         <button class="chart-tab" data-chart="dividend">配息</button>
         <button class="chart-tab" data-chart="bubble">泡泡</button>
+        <button class="chart-tab" data-chart="yearDividend">年度股息</button>
         <button class="chart-tab" data-chart="networth">淨值</button>
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0 4px;flex-wrap:wrap" id="chart-secondary-row">
@@ -1235,6 +1236,108 @@ async function renderNetWorthChart() {
   renderNetWorthChartUI(netWorthBaseCache);
 }
 renderNetWorthChart._token = 0;
+
+// ── 年度股息走勢 ───────────────────────────────────────────
+async function renderYearDividendChart() {
+  var area = document.getElementById('chart-area');
+  if (!area) return;
+  var reqToken = ++renderYearDividendChart._token;
+
+  var divItems = [];
+  stocks.forEach(function(st){
+    (txns[st.id]||[]).forEach(function(t){
+      if (t.type==='股息') divItems.push({st:st, date:normDate(t.date), total:+t.total||0});
+    });
+  });
+  if (!divItems.length) {
+    area.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-msg">尚無股息紀錄</div></div>';
+    return;
+  }
+
+  var needsFx = divItems.some(function(d){ return d.st.market==='美股' || (d.st.market==='基金' && d.st.currency==='USD'); });
+  if (needsFx) {
+    var earliest = divItems.reduce(function(m,d){ return (!m||d.date<m)?d.date:m; }, null);
+    var period1 = Math.floor(new Date(earliest+'T00:00:00Z').getTime()/1000);
+    var period2 = Math.floor(Date.now()/1000)+86400;
+    area.innerHTML = '<div class="chart-wrap"><div class="chart-title">年度股息</div>' +
+      '<div style="text-align:center;padding:48px 20px;color:var(--text2)"><span class="spinner"></span>　換算美股股息匯率中…</div></div>';
+    try { await fetchHistFx(period1, period2); } catch(e) {}
+    if (reqToken !== renderYearDividendChart._token) return;
+  }
+
+  var yearMap = {};
+  divItems.forEach(function(d){
+    var y = d.date.slice(0,4);
+    if (!yearMap[y]) yearMap[y] = {'台股':0, '美股':0, '基金':0};
+    var val = d.total;
+    if (d.st.market==='美股' || (d.st.market==='基金' && d.st.currency==='USD')) {
+      var fxRate = seriesValueAt(histFxCache, d.date, usdRate||32);
+      val = val*fxRate;
+    }
+    yearMap[y][d.st.market] += val;
+  });
+
+  var years = Object.keys(yearMap).sort();
+  var twArr = years.map(function(y){ return Math.round(yearMap[y]['台股']); });
+  var usArr = years.map(function(y){ return Math.round(yearMap[y]['美股']); });
+  var fundArr = years.map(function(y){ return Math.round(yearMap[y]['基金']); });
+  var totalArr = years.map(function(y,i){ return twArr[i]+usArr[i]+fundArr[i]; });
+
+  // 今年是否為進行中年度（未滿一整年），提示用
+  var curYear = today().slice(0,4);
+  var lastIsPartial = years[years.length-1]===curYear;
+
+  var analysisHtml = '';
+  if (years.length>=2) {
+    var lastIdx = years.length-1, prevIdx = years.length-2;
+    // 若最新年度尚未走完，比較「前一個完整年」與「再前一年」較公允；但預設仍比較最近兩個有資料的年度，並註記
+    var lastVal = totalArr[lastIdx], prevVal = totalArr[prevIdx];
+    var diff = lastVal - prevVal;
+    var pct = prevVal>0 ? diff/prevVal : null;
+    analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:14px 16px;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">'+years[prevIdx]+' 年股息</div><div style="font-size:15px;font-weight:700;font-family:monospace">$'+fn(prevVal)+'</div></div>' +
+      '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">'+years[lastIdx]+' 年股息'+(lastIsPartial?'（進行中）':'')+'</div><div style="font-size:15px;font-weight:700;font-family:monospace">$'+fn(lastVal)+'</div></div>' +
+      '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增</div><div style="font-size:15px;font-weight:700;font-family:monospace" class="'+pcls(diff)+'">'+ps(diff)+fc(diff)+'</div></div>' +
+      '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增率</div><div style="font-size:15px;font-weight:700;font-family:monospace" class="'+(pct===null?'muted':pcls(pct))+'">'+(pct===null?'—':fp(pct))+'</div></div>' +
+    '</div>';
+  }
+
+  chartInstances.forEach(function(c){ if(c) c.destroy(); }); chartInstances=[];
+  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">年度股息 <span style="font-size:10px;color:var(--text3);font-weight:400">依股息入帳年度加總'+(needsFx?'・美股/美金基金以當時匯率換算':'')+'</span></div>' +
+    analysisHtml +
+    '<div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
+
+  var inst = new Chart(document.getElementById('myChart'), {
+    type:'bar',
+    data:{
+      labels: years,
+      datasets:[
+        {label:'台股', data:twArr, backgroundColor:'rgba(61,142,240,0.75)', stack:'div', borderRadius:4},
+        {label:'美股', data:usArr, backgroundColor:'rgba(240,180,41,0.75)', stack:'div', borderRadius:4},
+        {label:'基金', data:fundArr, backgroundColor:'rgba(155,114,245,0.75)', stack:'div', borderRadius:4}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12}},
+        tooltip:{callbacks:{
+          label:function(ctx){ return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW'); },
+          footer:function(items){
+            var i = items[0].dataIndex;
+            return '合計: $'+totalArr[i].toLocaleString('zh-TW');
+          }
+        }}
+      },
+      scales:{
+        x:{ ticks:{color:'#8899aa'}, grid:{color:'#2a3d55'}, stacked:true },
+        y:{ ticks:{color:'#8899aa', callback:function(v){ var a=Math.abs(v); return (v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW')); }}, grid:{color:'#2a3d55'}, stacked:true }
+      }
+    }
+  });
+  chartInstances.push(inst);
+}
+renderYearDividendChart._token = 0;
 
 // ── Calc ───────────────────────────────────────────────────
 // ── getAvailableLots: 計算每筆買入批次的剩餘股數 ──────────────
@@ -2201,7 +2304,7 @@ function renderCharts() {
     curAllocTab='stocks';
   }
 
-  // 淨值走勢圖：獨立分支，不套用市場/持有篩選、標的篩選（走自己的 legend 篩選）
+  // 淨值走勢圖／年度股息圖：獨立分支，不套用市場/持有篩選、標的篩選（走自己的 legend 篩選）
   var secRow = document.getElementById('chart-secondary-row');
   if (curChartType==='networth') {
     if (secRow) secRow.style.display='none';
@@ -2210,6 +2313,15 @@ function renderCharts() {
       return;
     }
     renderNetWorthChart();
+    return;
+  }
+  if (curChartType==='yearDividend') {
+    if (secRow) secRow.style.display='none';
+    if (stocks.length===0) {
+      document.getElementById('chart-area').innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-msg">尚無資料</div></div>';
+      return;
+    }
+    renderYearDividendChart();
     return;
   }
   if (secRow) secRow.style.display='';
