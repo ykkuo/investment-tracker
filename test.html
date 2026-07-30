@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53c1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53c2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1242,15 +1242,18 @@ async function renderYearDividendChart() {
   var area = document.getElementById('chart-area');
   if (!area) return;
   var reqToken = ++renderYearDividendChart._token;
+  var mkt = curChartMarket; // 'all' | '台股' | '美股' | '基金'
 
   var divItems = [];
   stocks.forEach(function(st){
+    if (mkt!=='all' && st.market!==mkt) return;
     (txns[st.id]||[]).forEach(function(t){
       if (t.type==='股息') divItems.push({st:st, date:normDate(t.date), total:+t.total||0});
     });
   });
   if (!divItems.length) {
-    area.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-msg">尚無股息紀錄</div></div>';
+    var mktLabel = mkt==='all' ? '' : '（'+mkt+'）';
+    area.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-msg">尚無股息紀錄'+mktLabel+'</div></div>';
     return;
   }
 
@@ -1283,9 +1286,17 @@ async function renderYearDividendChart() {
   var fundArr = years.map(function(y){ return Math.round(yearMap[y]['基金']); });
   var totalArr = years.map(function(y,i){ return twArr[i]+usArr[i]+fundArr[i]; });
 
+  // 依市場篩選決定要顯示哪些系列
+  var seriesDefs = [
+    {key:'台股', data:twArr, color:'rgba(61,142,240,0.75)'},
+    {key:'美股', data:usArr, color:'rgba(240,180,41,0.75)'},
+    {key:'基金', data:fundArr, color:'rgba(155,114,245,0.75)'}
+  ].filter(function(s){ return mkt==='all' || s.key===mkt; });
+
   // 今年是否為進行中年度（未滿一整年），提示用
   var curYear = today().slice(0,4);
   var lastIsPartial = years[years.length-1]===curYear;
+  var scopeLabel = mkt==='all' ? '' : '（'+mkt+'）';
 
   var analysisHtml = '';
   if (years.length>=2) {
@@ -1303,7 +1314,7 @@ async function renderYearDividendChart() {
   }
 
   chartInstances.forEach(function(c){ if(c) c.destroy(); }); chartInstances=[];
-  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">年度股息 <span style="font-size:10px;color:var(--text3);font-weight:400">依股息入帳年度加總'+(needsFx?'・美股/美金基金以當時匯率換算':'')+'</span></div>' +
+  area.innerHTML = '<div class="chart-wrap"><div class="chart-title">年度股息'+scopeLabel+' <span style="font-size:10px;color:var(--text3);font-weight:400">依股息入帳年度加總'+(needsFx?'・美股/美金基金以當時匯率換算':'')+'</span></div>' +
     analysisHtml +
     '<div class="chart-canvas-wrap"><canvas id="myChart"></canvas></div></div>';
 
@@ -1311,22 +1322,18 @@ async function renderYearDividendChart() {
     type:'bar',
     data:{
       labels: years,
-      datasets:[
-        {label:'台股', data:twArr, backgroundColor:'rgba(61,142,240,0.75)', stack:'div', borderRadius:4},
-        {label:'美股', data:usArr, backgroundColor:'rgba(240,180,41,0.75)', stack:'div', borderRadius:4},
-        {label:'基金', data:fundArr, backgroundColor:'rgba(155,114,245,0.75)', stack:'div', borderRadius:4}
-      ]
+      datasets: seriesDefs.map(function(s){ return {label:s.key, data:s.data, backgroundColor:s.color, stack:'div', borderRadius:4}; })
     },
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{
-        legend:{position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12}},
+        legend:{display: seriesDefs.length>1, position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12}},
         tooltip:{callbacks:{
           label:function(ctx){ return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW'); },
-          footer:function(items){
+          footer: seriesDefs.length>1 ? function(items){
             var i = items[0].dataIndex;
             return '合計: $'+totalArr[i].toLocaleString('zh-TW');
-          }
+          } : undefined
         }}
       },
       scales:{
