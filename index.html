@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53a5</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53c4</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -650,7 +650,7 @@ var histPriceCache = {}; // {sid: {dates:[...], prices:[...]}} 週線歷史股�
 var histFxCache = null;  // {dates:[...], prices:[...]} 週線歷史 USD/TWD 匯率快取
 
 var pfPickerOpen = false;
-var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true};
+var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true, nextDiv:true};
 var wlSortBy = localStorage.getItem('wl_sortBy') || 'code';
 var wlSortDir = localStorage.getItem('wl_sortDir') || 'asc';
 var WL_COL_DEFS = [
@@ -662,7 +662,9 @@ var WL_COL_DEFS = [
   {key:'dayPct', label:'今日損益(%)'},
   {key:'unreal', label:'總損益'},
   {key:'unrPct', label:'總損益(%)'},
+  {key:'nextDiv',label:'下次配息'},
 ];
+var divCalCache = null; // {code: [{date, cash, type}, ...]} 台股(上市)除權息預告，來自 TWSE OpenAPI
 var wlVisibleRows = (function(){ var v=parseInt(localStorage.getItem('wl_visible_rows')||'',10); return (!isNaN(v)&&v>=3&&v<=30)?v:(window.innerWidth<=640?8:12); })();
 function applyWlTableHeight(){
   var rowH = window.innerWidth<=640 ? 52 : 56;
@@ -852,6 +854,46 @@ async function fetchUsdRate() {
       usdRateAt = new Date().toLocaleString('zh-TW', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
     }
   } catch(e) {}
+}
+
+// ── 除權息預告（台股・上市，來自 TWSE OpenAPI）────────────────
+async function fetchDividendCalendar() {
+  if (divCalCache) return divCalCache;
+  var map = {};
+  try {
+    const url = PROXY + encodeURIComponent('https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL');
+    const ctrl = new AbortController();
+    const timer = setTimeout(function(){ctrl.abort();}, 15000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const json = await res.json();
+      (json||[]).forEach(function(row){
+        var code = row && (row.Code||row.code);
+        var dateStr = row && String(row.Date||row.date||'');
+        if (!code || dateStr.length!==7) return;
+        var rocY = parseInt(dateStr.slice(0,3),10);
+        if (isNaN(rocY)) return;
+        var mm = dateStr.slice(3,5), dd = dateStr.slice(5,7);
+        var greg = (rocY+1911)+'-'+mm+'-'+dd;
+        code = String(code).trim();
+        if (!map[code]) map[code]=[];
+        map[code].push({date:greg, cash:row.CashDividend||row.cashDividend||'', type:row.Exdividend||row.exdividend||''});
+      });
+      Object.keys(map).forEach(function(c){ map[c].sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; }); });
+    }
+  } catch(e) {}
+  divCalCache = map;
+  return divCalCache;
+}
+
+function nextDividendFor(code) {
+  if (!divCalCache) return null;
+  var list = divCalCache[code];
+  if (!list || !list.length) return null;
+  var t = today();
+  for (var i=0;i<list.length;i++) { if (list[i].date >= t) return list[i]; }
+  return null;
 }
 
 async function fetchAllPrices() {
@@ -1060,11 +1102,17 @@ function renderNetWorthChartUI(base) {
   var startDate = fd(series.dates[0]);
   var endDate = fd(series.dates[series.dates.length-1]);
 
+  // 初始狀態（兩市場皆顯示）直接算好數字寫進 HTML，不依賴之後的 JS 更新是否成功
+  var initStartTotal = cumulative[0];
+  var initEndTotal = cumulative[cumulative.length-1];
+  var initDiff = initEndTotal - initStartTotal;
+  var initPct = initStartTotal > 0 ? initDiff/initStartTotal : null;
+
   var analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:14px 16px;flex-wrap:wrap">' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期初（'+startDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-start-val">—</div></div>' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期末（'+endDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-end-val">—</div></div>' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">差額</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-diff-val">—</div></div>' +
-    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">漲跌幅</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-pct-val">—</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期初（'+startDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-start-val">$'+fn(initStartTotal)+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">期末（'+endDate+'）</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-end-val">$'+fn(initEndTotal)+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">差額</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-diff-val" class="'+pcls(initDiff)+'">'+ps(initDiff)+fc(initDiff)+'</div></div>' +
+    '<div style="flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">漲跌幅</div><div style="font-size:15px;font-weight:700;font-family:monospace" id="nw-pct-val" class="'+(initPct===null?'muted':pcls(initPct))+'">'+(initPct===null?'—':fp(initPct))+'</div></div>' +
   '</div>';
 
   area.innerHTML = '<div class="chart-wrap"><div class="chart-title">歷史淨值走勢 <span id="nw-scope-label" style="font-size:10px;color:var(--text3);font-weight:400">每日歷史股價・累加顯示（最上層＝合計）・點下方圖例可篩選市場</span></div>' +
@@ -1187,6 +1235,122 @@ async function renderNetWorthChart() {
   renderNetWorthChartUI(netWorthBaseCache);
 }
 renderNetWorthChart._token = 0;
+
+// ── 市場概覽第4張圖：年度股息（不受個股篩選/頂部市場篩選影響，跟其他3張市場概覽圖一致）──
+var renderMarketYearDividendChart_token = 0;
+async function renderMarketYearDividendChart(scopeStocks) {
+  var myToken = ++renderMarketYearDividendChart_token;
+  var bodyEl = document.getElementById('mktYearDivBody');
+  if (!bodyEl) return;
+
+  var divItems = [];
+  scopeStocks.forEach(function(st){
+    (txns[st.id]||[]).forEach(function(t){
+      if (t.type==='股息') divItems.push({st:st, date:normDate(t.date), total:+t.total||0});
+    });
+  });
+  if (!divItems.length) {
+    bodyEl.innerHTML = '<div class="empty-state" style="padding:24px 12px"><div class="empty-icon">💰</div><div class="empty-msg">尚無股息紀錄</div></div>';
+    return;
+  }
+
+  var needsFx = divItems.some(function(d){ return d.st.market==='美股' || (d.st.market==='基金' && d.st.currency==='USD'); });
+  if (needsFx) {
+    var earliest = divItems.reduce(function(m,d){ return (!m||d.date<m)?d.date:m; }, null);
+    var period1 = Math.floor(new Date(earliest+'T00:00:00Z').getTime()/1000);
+    var period2 = Math.floor(Date.now()/1000)+86400;
+    try { await fetchHistFx(period1, period2); } catch(e) {}
+    if (myToken !== renderMarketYearDividendChart_token) return; // 使用者已切換頁面，放棄結果
+    if (!document.getElementById('mktYearDivBody')) return;
+  }
+
+  var yearMap = {};
+  divItems.forEach(function(d){
+    var y = d.date.slice(0,4);
+    if (!yearMap[y]) yearMap[y] = {'台股':0, '美股':0, '基金':0};
+    var val = d.total;
+    if (d.st.market==='美股' || (d.st.market==='基金' && d.st.currency==='USD')) {
+      var fxRate = seriesValueAt(histFxCache, d.date, usdRate||32);
+      val = val*fxRate;
+    }
+    yearMap[y][d.st.market] += val;
+  });
+  var years = Object.keys(yearMap).sort();
+  var twArr = years.map(function(y){ return Math.round(yearMap[y]['台股']); });
+  var usArr = years.map(function(y){ return Math.round(yearMap[y]['美股']); });
+  var fundArr = years.map(function(y){ return Math.round(yearMap[y]['基金']); });
+  var totalArr = years.map(function(y,i){ return twArr[i]+usArr[i]+fundArr[i]; });
+  var curYear = today().slice(0,4);
+  var lastIsPartial = years[years.length-1]===curYear;
+
+  var analysisHtml = '';
+  var hasAnalysis = years.length>=2;
+  if (hasAnalysis) {
+    var lastIdx=years.length-1, prevIdx=years.length-2;
+    analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:12px 14px;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">'+years[prevIdx]+' 年</div><div style="font-size:14px;font-weight:700;font-family:monospace" id="myd-prev-val">—</div></div>' +
+      '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">'+years[lastIdx]+' 年'+(lastIsPartial?'（進行中）':'')+'</div><div style="font-size:14px;font-weight:700;font-family:monospace" id="myd-last-val">—</div></div>' +
+      '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增</div><div style="font-size:14px;font-weight:700;font-family:monospace" id="myd-diff-val">—</div></div>' +
+      '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增率</div><div style="font-size:14px;font-weight:700;font-family:monospace" id="myd-pct-val">—</div></div>' +
+    '</div>';
+  }
+
+  bodyEl.innerHTML = analysisHtml + '<div class="chart-canvas-wrap"><canvas id="mktYearDiv"></canvas></div>';
+
+  // 依目前圖例可見的市場，重算 年度前/年度後/年增/年增率
+  function updateYearDivAnalysis(twV, usV, fundV) {
+    if (!hasAnalysis) return;
+    var lastIdx=years.length-1, prevIdx=years.length-2;
+    var arr = years.map(function(_,i){
+      var v=0;
+      if (twV) v+=twArr[i];
+      if (usV) v+=usArr[i];
+      if (fundV) v+=fundArr[i];
+      return v;
+    });
+    var prevVal=arr[prevIdx], lastVal=arr[lastIdx], diff=lastVal-prevVal;
+    var pct = prevVal>0 ? diff/prevVal : null;
+    var prevEl=document.getElementById('myd-prev-val'), lastEl=document.getElementById('myd-last-val'),
+        diffEl=document.getElementById('myd-diff-val'), pctEl=document.getElementById('myd-pct-val');
+    if(prevEl) prevEl.textContent='$'+fn(prevVal);
+    if(lastEl) lastEl.textContent='$'+fn(lastVal);
+    if(diffEl){ diffEl.textContent=ps(diff)+fc(diff); diffEl.className=pcls(diff); }
+    if(pctEl){ pctEl.textContent=pct===null?'—':fp(pct); pctEl.className=pct===null?'muted':pcls(pct); }
+  }
+
+  var inst = new Chart(document.getElementById('mktYearDiv'), {
+    type:'bar',
+    data:{ labels: years, datasets:[
+      {label:'台股', data:twArr, backgroundColor:'rgba(61,142,240,0.75)', stack:'div', borderRadius:4},
+      {label:'美股', data:usArr, backgroundColor:'rgba(240,180,41,0.75)', stack:'div', borderRadius:4},
+      {label:'基金', data:fundArr, backgroundColor:'rgba(155,114,245,0.75)', stack:'div', borderRadius:4}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{
+          position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12},
+          onClick: function(e, legendItem, legend) {
+            var ci = legend.chart;
+            var idx = legendItem.datasetIndex;
+            if (ci.isDatasetVisible(idx)) ci.hide(idx); else ci.show(idx);
+            ci.update();
+            updateYearDivAnalysis(ci.isDatasetVisible(0), ci.isDatasetVisible(1), ci.isDatasetVisible(2));
+          }
+        },
+        tooltip:{callbacks:{
+          label:function(ctx){ return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW'); },
+          footer:function(items){ var s=items.reduce(function(a,i){return a+i.parsed.y;},0); return '合計: $'+Math.round(s).toLocaleString('zh-TW'); }
+        }}
+      },
+      scales:{
+        x:{ ticks:{color:'#8899aa'}, grid:{color:'#2a3d55'}, stacked:true },
+        y:{ ticks:{color:'#8899aa', callback:function(v){ var a=Math.abs(v); return (v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW')); }}, grid:{color:'#2a3d55'}, stacked:true }
+      }
+    }
+  });
+  chartInstances.push(inst);
+  updateYearDivAnalysis(true, true, true);
+}
 
 // ── Calc ───────────────────────────────────────────────────
 // ── getAvailableLots: 計算每筆買入批次的剩餘股數 ──────────────
@@ -2153,7 +2317,7 @@ function renderCharts() {
     curAllocTab='stocks';
   }
 
-  // 淨值走勢圖：獨立分支，不套用市場/持有篩選、標的篩選（走自己的 legend 篩選）
+  // 淨值走勢圖／年度股息圖：獨立分支，不套用市場/持有篩選、標的篩選（走自己的 legend 篩選）
   var secRow = document.getElementById('chart-secondary-row');
   if (curChartType==='networth') {
     if (secRow) secRow.style.display='none';
@@ -2402,7 +2566,10 @@ function renderCharts() {
         // 圖3：損益比較
         '<div class="chart-wrap">' +
         '<div class="chart-title">損益比較（未實現 / 已實現 / 配息）</div>' +
-        '<div class="chart-canvas-wrap"><canvas id="mktPnl"></canvas></div></div>';
+        '<div class="chart-canvas-wrap"><canvas id="mktPnl"></canvas></div></div>' +
+        // 圖4：年度股息
+        '<div class="chart-wrap"><div class="chart-title">年度股息</div>' +
+        '<div id="mktYearDivBody"><div style="text-align:center;padding:30px 16px;color:var(--text2)"><span class="spinner"></span>　讀取股息紀錄中…</div></div></div>';
 
       document.getElementById('chart-area').innerHTML = allocTabHtml + html;
 
@@ -2455,6 +2622,9 @@ function renderCharts() {
           }
         }
       }));
+
+      // 圖4 年度股息（依股息入帳年度加總，異步：可能需要抓歷史匯率）
+      renderMarketYearDividendChart(marketStocks);
     }
 
     // 子 tab 事件已移至頂層 setChartTopTab
@@ -3383,7 +3553,8 @@ function renderWatchlistTable() {
     dayPnl: function(r){ return r.dayPnl; },
     dayPct: function(r){ return r.dayPct; },
     unreal: function(r){ return toTWDChart(r.s.unreal, r.st); },
-    unrPct: function(r){ return r.s.unrPct; }
+    unrPct: function(r){ return r.s.unrPct; },
+    nextDiv: function(r){ if (r.st.market!=='台股') return null; var nd=nextDividendFor(r.st.code); return nd ? nd.date : null; }
   };
   rows.sort(function(a,b){
     var getV = sortValFn[wlSortBy] || sortValFn.code;
@@ -3412,7 +3583,7 @@ function renderWatchlistTable() {
   function fmtPnl(v){ if(v===null)return'<span class="muted">—</span>'; var c=v>0?'green':v<0?'red':'muted'; return'<span class="'+c+'">'+(v>=0?'+':'')+'$'+fn(Math.round(v))+'</span>'; }
   function fmtPct(v){ if(v===null)return'<span class="muted">—</span>'; var c=v>0?'green':v<0?'red':'muted'; return'<span class="'+c+'">'+(v>=0?'+':'')+(v*100).toFixed(2)+'%</span>'; }
   var active = WL_COL_DEFS.filter(function(c){ return wlCols[c.key]; });
-  var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:fmtPct(totalDayPct),unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct)};
+  var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:fmtPct(totalDayPct),unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct),nextDiv:''};
   var cellFn = {
     shares:function(r){return fn(r.s.cur);},
     price: function(r){return '$'+fn(r.pr,2);},
@@ -3421,7 +3592,12 @@ function renderWatchlistTable() {
     dayPnl:function(r){return fmtPnl(r.dayPnl);},
     dayPct:function(r){return fmtPct(r.dayPct);},
     unreal:function(r){return fmtPnl(toTWDChart(r.s.unreal, r.st));},
-    unrPct:function(r){return fmtPct(r.s.unrPct);}
+    unrPct:function(r){return fmtPct(r.s.unrPct);},
+    nextDiv:function(r){
+      if (r.st.market!=='台股') return '<span class="muted">—</span>';
+      var nd = nextDividendFor(r.st.code);
+      return nd ? fd(nd.date) : '<span class="muted">—</span>';
+    }
   };
   // 美股頁顯示 USD，其他頁已換算為 TWD
   var currNote = showMarket==='美股' ? ' <span style="font-size:10px;color:var(--gold);font-weight:700">USD</span>' : '';
@@ -3457,10 +3633,13 @@ function renderWatchlistTable() {
   });
 }
 
-function renderWatchlist() {
+async function renderWatchlist() {
   buildWlColPicker();
   applyWlTableHeight();
   renderWatchlistTable();
+  if (!divCalCache) {
+    fetchDividendCalendar().then(function(){ renderWatchlistTable(); });
+  }
   var inp=document.getElementById('wl-visible-rows');
   if(inp){
     inp.value = wlVisibleRows;
