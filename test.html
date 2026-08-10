@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53c4</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53d1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1384,7 +1384,7 @@ function getAvailableLots(sid) {
       }
     }
   });
-  return lots.filter(function(l){ return l.remaining > 0; });
+  return lots.filter(function(l){ return l.remaining > 1e-6; }); // 同樣防呆，避免浮點殘值誤判為還有剩
 }
 
 function calc(sid, price) {
@@ -1463,11 +1463,13 @@ function calc(sid, price) {
       real += +t.total - thisCost;
       realCost += thisCost;
       if(bs<0) bs=0; if(bc<0) bc=0;
+      if (Math.abs(bs) < 1e-6) bs = 0; // 修正浮點數誤差：極小殘值（如5e-15股）視為賣光
       if(bs <= 0 && bc > 0.001) { real -= bc; bc = 0; }
     } else if (t.type==='股息') {
       div+=+t.total;
     }
   });
+  if (Math.abs(bs) < 1e-6) { bs = 0; bc = 0; } // 保險：全部交易跑完後再次防呆
   var avg = bs>0 ? bc/bs : 0;
   var cost = bs*avg;
   var mv = bs*price;
