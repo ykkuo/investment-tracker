@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55a1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v53e1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -415,7 +415,6 @@ textarea.input{height:72px;resize:none}
         <div style="font-size:20px;font-weight:800" id="d-price"></div>
         <div style="font-size:11px;color:rgba(255,255,255,0.5)" id="d-price-time"></div>
       </div>
-      <button class="btn-icon" id="btn-split-stock" title="拆股調整">🔀</button>
       <button class="btn-icon" id="btn-add-tx">＋ 新增</button>
     </div>
   </div>
@@ -570,31 +569,6 @@ textarea.input{height:72px;resize:none}
     </div>
     <button class="btn-primary c-green" id="btn-submit-tx">新增買入</button>
     <button class="btn-ghost" id="btn-cancel-tx">取消</button>
-  </div>
-</div>
-
-<!-- ══ STOCK SPLIT MODAL ══ -->
-<div class="overlay" id="m-split">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">🔀 拆股 / 反向併股調整</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:16px" id="split-stock-label"></div>
-    <div class="field">
-      <label class="field-label">換股比例</label>
-      <div style="display:flex;align-items:center;gap:8px">
-        <input class="input" id="split-old" type="number" inputmode="decimal" value="1" style="text-align:center">
-        <span style="color:var(--text2);font-weight:700;flex-shrink:0">股　→</span>
-        <input class="input" id="split-new" type="number" inputmode="decimal" value="10" style="text-align:center">
-        <span style="color:var(--text2);font-weight:700;flex-shrink:0">股</span>
-      </div>
-      <div class="field-hint">例如：1 股變 10 股（常見美股拆股）填 1 → 10；10 股合併為 1 股（反向併股）填 10 → 1</div>
-    </div>
-    <div style="background:var(--bg3);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.6" id="split-preview"></div>
-    <div style="background:rgba(255,92,92,0.08);border:1px solid rgba(255,92,92,0.25);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--red);margin-bottom:16px;line-height:1.6">
-      ⚠️ 此操作會調整<b>全部歷史交易</b>（含已賣出）的股數與單價，各筆<b>總金額不變</b>。執行前建議先到「資料」頁匯出備份，此操作無法一鍵復原。
-    </div>
-    <button class="btn-primary c-blue" id="btn-confirm-split">確認執行拆股調整</button>
-    <button class="btn-ghost" id="btn-cancel-split">取消</button>
   </div>
 </div>
 
@@ -1378,6 +1352,216 @@ async function renderMarketYearDividendChart(scopeStocks) {
   updateYearDivAnalysis(true, true, true);
 }
 
+// ── 市場概覽第5張圖：年度績效（已實現＋股息＋未實現變化，含年增率）──
+var renderYearPerformanceChart_token = 0;
+async function renderYearPerformanceChart(scopeStocks) {
+  var myToken = ++renderYearPerformanceChart_token;
+  var bodyEl = document.getElementById('mktYearPerfBody');
+  if (!bodyEl) return;
+
+  var allDates = [];
+  scopeStocks.forEach(function(st){ (txns[st.id]||[]).forEach(function(t){ allDates.push(normDate(t.date)); }); });
+  if (!allDates.length) {
+    bodyEl.innerHTML = '<div class="empty-state" style="padding:24px 12px"><div class="empty-icon">📈</div><div class="empty-msg">尚無交易紀錄</div></div>';
+    return;
+  }
+  var minDate = allDates.reduce(function(m,d){ return (!m||d<m)?d:m; }, null);
+  var startYear = parseInt(minDate.slice(0,4),10);
+  var curYearNum = parseInt(today().slice(0,4),10);
+  var years = [];
+  for (var y=startYear; y<=curYearNum; y++) years.push(String(y));
+
+  var needsFx = scopeStocks.some(function(st){ return st.market==='美股' || (st.market==='基金' && st.currency==='USD'); });
+  if (needsFx) {
+    var period1 = Math.floor(new Date(minDate+'T00:00:00Z').getTime()/1000);
+    var period2 = Math.floor(Date.now()/1000)+86400;
+    try { await fetchHistFx(period1, period2); } catch(e) {}
+    if (myToken !== renderYearPerformanceChart_token) return;
+    if (!document.getElementById('mktYearPerfBody')) return;
+  }
+
+  // ── 已實現損益 + 股息（依交易日期年份分桶，USD 依當日匯率換算）──
+  var realizedByYear = {}, divByYear = {};
+  years.forEach(function(y){ realizedByYear[y]=0; divByYear[y]=0; });
+
+  scopeStocks.forEach(function(st){
+    var isFund = st.market==='基金';
+    var isUSD = st.market==='美股' || (isFund && st.currency==='USD');
+    var list = (txns[st.id]||[]).slice().sort(function(a,b){ var da=normDate(a.date),db=normDate(b.date); return da>db?1:da<db?-1:0; });
+
+    if (isFund) {
+      var invested=0;
+      list.forEach(function(t){
+        var y = normDate(t.date).slice(0,4);
+        var amt = +t.total||0;
+        var fx = isUSD ? seriesValueAt(histFxCache, normDate(t.date), usdRate||32) : 1;
+        if (t.type==='買入'||t.type==='再投入') { invested += amt; }
+        else if (t.type==='賣出') {
+          var pct = invested>0 ? Math.min(amt/invested,1) : 0;
+          var thisCost = invested*pct;
+          if (t.sellCost!=null && +t.sellCost>0) thisCost = +t.sellCost;
+          var pnl = amt - thisCost;
+          if (realizedByYear.hasOwnProperty(y)) realizedByYear[y] += pnl*fx;
+          invested -= thisCost; if (invested<0) invested=0;
+        } else if (t.type==='股息') {
+          if (divByYear.hasOwnProperty(y)) divByYear[y] += amt*fx;
+        }
+      });
+    } else {
+      var bs=0, bc=0, lotMap={};
+      list.forEach(function(t){
+        var y = normDate(t.date).slice(0,4);
+        var fx = isUSD ? seriesValueAt(histFxCache, normDate(t.date), usdRate||32) : 1;
+        if (t.type==='買入'||t.type==='再投入') {
+          var cps = +(t.shares||0)>0 ? +t.total/+(t.shares||0) : 0;
+          lotMap[t.id] = { costPerShare: cps };
+          bs += +(t.shares||0); bc += +t.total;
+        } else if (t.type==='賣出') {
+          var sh = +(t.shares||0);
+          var avgNow = bs>0 ? bc/bs : 0;
+          var costPerShare;
+          if (t.sellLots && t.sellLots.length) {
+            var totalCostOfLots=0, totalShsOfLots=0;
+            t.sellLots.forEach(function(sl){
+              var lot=lotMap[sl.buyTxId]; var cps=lot?lot.costPerShare:avgNow;
+              totalCostOfLots += cps*+(sl.shares||0); totalShsOfLots += +(sl.shares||0);
+            });
+            costPerShare = totalShsOfLots>0 ? totalCostOfLots/totalShsOfLots : avgNow;
+            t.sellLots.forEach(function(sl){
+              var lot=lotMap[sl.buyTxId]; var cps=lot?lot.costPerShare:avgNow;
+              bc -= cps*+(sl.shares||0);
+            });
+            bs -= sh;
+          } else {
+            costPerShare = (t.sellCost!=null && +t.sellCost>0) ? +t.sellCost : avgNow;
+            bs -= sh; bc -= sh*costPerShare;
+          }
+          var thisCost = sh*costPerShare;
+          var pnl = +t.total - thisCost;
+          if (bs<0) bs=0; if (bc<0) bc=0;
+          if (Math.abs(bs) < 1e-6) bs = 0;
+          if (bs<=0 && bc>0.001) { pnl -= bc; bc = 0; }
+          if (realizedByYear.hasOwnProperty(y)) realizedByYear[y] += pnl*fx;
+        } else if (t.type==='股息') {
+          if (divByYear.hasOwnProperty(y)) divByYear[y] += (+t.total)*fx;
+        }
+      });
+    }
+  });
+
+  // ── 未實現變化（僅台股/美股，需歷史股價；基金無歷史淨值故不計入）──
+  var unrealByYear = {}; years.forEach(function(y){ unrealByYear[y]=0; });
+  var base = netWorthBaseCache;
+  if (!base) { try { base = await computeNetWorthBase(); } catch(e) { base = null; } }
+  if (myToken !== renderYearPerformanceChart_token) return;
+  if (!document.getElementById('mktYearPerfBody')) return;
+  if (!netWorthBaseCache) netWorthBaseCache = base;
+
+  var hasHistData = !!(base && base.priceStocks && base.priceStocks.length);
+  function unrealAt(dateStr) {
+    if (!hasHistData) return 0;
+    var fxRate = seriesValueAt(base.fx, dateStr, usdRate||32);
+    var total = 0;
+    base.priceStocks.forEach(function(st){
+      var tl = timelineValueAt(base.timelines[st.id], dateStr);
+      var pr = seriesValueAt(histPriceCache[st.id], dateStr, 0);
+      var val = tl.shares*pr - tl.cost;
+      if (st.market==='美股') val = val*fxRate;
+      total += val;
+    });
+    return total;
+  }
+  if (hasHistData) {
+    var todayStr = today();
+    var prevVal = unrealAt(base.earliest);
+    years.forEach(function(y){
+      var cutoff = (y===String(curYearNum)) ? todayStr : (y+'-12-31');
+      if (cutoff > todayStr) cutoff = todayStr;
+      var val = unrealAt(cutoff);
+      unrealByYear[y] = val - prevVal;
+      prevVal = val;
+    });
+  }
+
+  // ── 加總 & 年增率（分母：該年期初市值；基金無歷史淨值，以投入成本估算）──
+  var totalByYear = years.map(function(y){ return realizedByYear[y]+divByYear[y]+unrealByYear[y]; });
+
+  function netWorthProxyAt(dateStr) {
+    var v = 0;
+    if (hasHistData) {
+      var fxRate = seriesValueAt(base.fx, dateStr, usdRate||32);
+      base.priceStocks.forEach(function(st){
+        var tl = timelineValueAt(base.timelines[st.id], dateStr);
+        var pr = seriesValueAt(histPriceCache[st.id], dateStr, 0);
+        var val = tl.shares*pr;
+        if (st.market==='美股') val = val*fxRate;
+        v += val;
+      });
+    }
+    scopeStocks.forEach(function(st){
+      if (st.market!=='基金') return;
+      var tl = timelineValueAt(buildStockTimeline(st.id), dateStr);
+      v += tl.cost; // 基金無歷史淨值，以投入成本估算期初價值
+    });
+    return v;
+  }
+  var pctByYear = years.map(function(y,i){
+    var cutoffPrev = (i===0) ? minDate : (years[i-1]+'-12-31');
+    var startVal = netWorthProxyAt(cutoffPrev);
+    return startVal>0 ? totalByYear[i]/startVal : null;
+  });
+
+  var curYear = today().slice(0,4);
+  var lastIsPartial = years[years.length-1]===curYear;
+  var lastIdx = years.length-1;
+
+  var analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:12px 14px;flex-wrap:wrap">' +
+    '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">'+years[lastIdx]+' 年'+(lastIsPartial?'（進行中）':'')+' 總績效</div><div style="font-size:14px;font-weight:700;font-family:monospace" class="'+pcls(totalByYear[lastIdx])+'">'+ps(totalByYear[lastIdx])+fc(totalByYear[lastIdx])+'</div></div>' +
+    '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增率</div><div style="font-size:14px;font-weight:700;font-family:monospace" class="'+(pctByYear[lastIdx]===null?'muted':pcls(pctByYear[lastIdx]))+'">'+(pctByYear[lastIdx]===null?'—':fp(pctByYear[lastIdx]))+'</div></div>' +
+  '</div>';
+
+  bodyEl.innerHTML = analysisHtml +
+    (hasHistData ? '' : '<div style="font-size:11px;color:var(--gold);margin-bottom:10px">⚠️ 尚無台股/美股歷史股價，未實現變化暫以 0 計入</div>') +
+    '<div class="chart-canvas-wrap"><canvas id="mktYearPerf"></canvas></div>';
+
+  var realArr = years.map(function(y){ return Math.round(realizedByYear[y]); });
+  var divArr  = years.map(function(y){ return Math.round(divByYear[y]); });
+  var unrArr  = years.map(function(y){ return Math.round(unrealByYear[y]); });
+  var pctArr  = pctByYear.map(function(p){ return p===null?null:parseFloat((p*100).toFixed(2)); });
+
+  var inst = new Chart(document.getElementById('mktYearPerf'), {
+    type:'bar',
+    data:{ labels: years, datasets:[
+      {label:'已實現損益', data:realArr, backgroundColor:realArr.map(function(v){return v>=0?'rgba(90,163,255,0.75)':'rgba(255,140,92,0.75)';}), stack:'perf', borderRadius:4},
+      {label:'股息', data:divArr, backgroundColor:'rgba(240,180,41,0.75)', stack:'perf', borderRadius:4},
+      {label:'未實現變化', data:unrArr, backgroundColor:unrArr.map(function(v){return v>=0?'rgba(52,199,123,0.75)':'rgba(255,92,92,0.75)';}), stack:'perf', borderRadius:4},
+      {label:'年增率', data:pctArr, type:'line', borderColor:'rgba(230,230,255,0.9)', backgroundColor:'rgba(230,230,255,0.15)', borderWidth:2, pointRadius:4, pointBackgroundColor:'rgba(230,230,255,0.9)', fill:false, yAxisID:'y2', spanGaps:true}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12} },
+        tooltip:{callbacks:{
+          label:function(ctx){
+            if (ctx.dataset.label==='年增率') return ctx.parsed.y!=null ? '年增率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%' : '—';
+            return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW');
+          },
+          footer:function(items){
+            var bars = items.filter(function(it){ return it.dataset.label!=='年增率'; });
+            var s = bars.reduce(function(a,it){ return a+it.parsed.y; },0);
+            return '年度總績效: '+(s>=0?'+':'')+'$'+Math.round(s).toLocaleString('zh-TW');
+          }
+        }}
+      },
+      scales:{
+        x:{ ticks:{color:'#8899aa'}, grid:{color:'#2a3d55'}, stacked:true },
+        y:{ ticks:{color:'#8899aa', callback:function(v){ var a=Math.abs(v); return (v<0?'-':'')+(a>=10000?(a/10000).toFixed(0)+'萬':a.toLocaleString('zh-TW')); }}, grid:{color:'#2a3d55'}, stacked:true },
+        y2:{ position:'right', ticks:{color:'rgba(230,230,255,0.9)', callback:function(v){ return (v>=0?'+':'')+v+'%'; }}, grid:{drawOnChartArea:false} }
+      }
+    }
+  });
+  chartInstances.push(inst);
+}
+
 // ── Calc ───────────────────────────────────────────────────
 // ── getAvailableLots: 計算每筆買入批次的剩餘股數 ──────────────
 function getAvailableLots(sid) {
@@ -1411,55 +1595,6 @@ function getAvailableLots(sid) {
     }
   });
   return lots.filter(function(l){ return l.remaining > 1e-6; }); // 同樣防呆，避免浮點殘值誤判為還有剩
-}
-
-// ── 拆股 / 反向併股：等比例調整全部歷史交易的股數與單價，總金額不變 ──
-async function applyStockSplit(sid, ratio) {
-  var st = stocks.find(function(s){ return s.id===sid; });
-  if (!st || st.market==='基金' || !ratio || ratio<=0) return;
-  var list = txns[sid] || [];
-  var batch = db.batch();
-  var updatedLocal = [];
-  list.forEach(function(t) {
-    if (t.type==='股息') { updatedLocal.push(t); return; } // 股息金額不受拆股影響
-    var data = {};
-    if (t.shares!=null) data.shares = roundShares(+t.shares * ratio);
-    if (t.price!=null) data.price = +t.price / ratio;
-    if (t.type==='賣出') {
-      if (t.sellCost!=null && +t.sellCost>0) data.sellCost = +t.sellCost / ratio;
-      if (t.sellLots && t.sellLots.length) {
-        data.sellLots = t.sellLots.map(function(sl){
-          return { buyTxId: sl.buyTxId, shares: roundShares(+(sl.shares||0) * ratio) };
-        });
-      }
-    }
-    batch.update(txnsRef(sid).doc(t.id), data);
-    updatedLocal.push(Object.assign({}, t, data));
-  });
-  // 記錄拆股歷程 + 若有快取現價，先粗略換算，之後由 fetchPrice 修正
-  var stockUpdate = {
-    splitHistory: firebase.firestore.FieldValue.arrayUnion({
-      ratio: ratio, appliedAt: new Date().toISOString()
-    })
-  };
-  if (priceCache[sid] && priceCache[sid].price) {
-    stockUpdate.lastPrice = priceCache[sid].price / ratio;
-    stockUpdate.lastPriceAt = new Date().toISOString();
-  }
-  batch.update(stocksRef().doc(sid), stockUpdate);
-
-  await batch.commit();
-  txns[sid] = updatedLocal;
-  if (priceCache[sid] && priceCache[sid].price) {
-    priceCache[sid] = { price: priceCache[sid].price / ratio, at: new Date().toISOString() };
-  }
-  if (!st.splitHistory) st.splitHistory = [];
-  st.splitHistory.push({ ratio: ratio, appliedAt: new Date().toISOString() });
-  netWorthBaseCache = null;
-  delete histPriceCache[sid];
-  saveLocalCache();
-  // 重新抓取現價，讓現價回到正確的拆股後尺度
-  try { await fetchPrice(sid, st.code, st.market); } catch(e) {}
 }
 
 function calc(sid, price) {
@@ -1566,7 +1701,6 @@ function ps(n){ return n>0?'+':''; }
 function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtAt(iso){ if(!iso)return''; var d=new Date(iso); return d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
 function normDate(d){ return d?String(d).replace(/\//g,'-'):'' ; }
-function roundShares(n){ return Math.round((+n||0)*1e6)/1e6; }
 
 // ── Portfolio ──────────────────────────────────────────────
 function getPrice(sid){ return priceCache[sid]?.price || 0; }
@@ -1944,8 +2078,6 @@ function showDetail(sid) {
   var st = stocks.find(function(s){ return s.id===sid; });
   document.getElementById('d-code').textContent = st.code;
   document.getElementById('d-name').textContent = st.name + ' · ' + st.market;
-  var splitBtn = document.getElementById('btn-split-stock');
-  if (splitBtn) splitBtn.style.display = (st.market==='基金') ? 'none' : '';
   updateDetailHeaderPrice(sid);
   document.getElementById('detail-overlay').classList.add('open');
   renderDetail();
@@ -2649,7 +2781,10 @@ function renderCharts() {
         '<div class="chart-canvas-wrap"><canvas id="mktPnl"></canvas></div></div>' +
         // 圖4：年度股息
         '<div class="chart-wrap"><div class="chart-title">年度股息</div>' +
-        '<div id="mktYearDivBody"><div style="text-align:center;padding:30px 16px;color:var(--text2)"><span class="spinner"></span>　讀取股息紀錄中…</div></div></div>';
+        '<div id="mktYearDivBody"><div style="text-align:center;padding:30px 16px;color:var(--text2)"><span class="spinner"></span>　讀取股息紀錄中…</div></div></div>' +
+        // 圖5：年度績效
+        '<div class="chart-wrap"><div class="chart-title">年度績效 <span style="font-size:10px;color:var(--text3);font-weight:400">已實現＋股息＋未實現變化・疊加顯示＋年增率折線</span></div>' +
+        '<div id="mktYearPerfBody"><div style="text-align:center;padding:30px 16px;color:var(--text2)"><span class="spinner"></span>　計算年度績效中…</div></div></div>';
 
       document.getElementById('chart-area').innerHTML = allocTabHtml + html;
 
@@ -2705,6 +2840,8 @@ function renderCharts() {
 
       // 圖4 年度股息（依股息入帳年度加總，異步：可能需要抓歷史匯率）
       renderMarketYearDividendChart(marketStocks);
+      // 圖5 年度績效（已實現＋股息＋未實現變化，異步：需歷史股價/匯率）
+      renderYearPerformanceChart(marketStocks);
     }
 
     // 子 tab 事件已移至頂層 setChartTopTab
@@ -3846,53 +3983,6 @@ function _renderWatchlistOLD() {
   }
 } // end _renderWatchlistOLD
 
-// ══ STOCK SPLIT ══════════════════════════════════════════════
-function openSplitModal() {
-  var st = stocks.find(function(s){ return s.id===curStockId; });
-  if (!st || st.market==='基金') return;
-  document.getElementById('split-stock-label').textContent = st.code + ' ' + st.name;
-  document.getElementById('split-old').value = 1;
-  document.getElementById('split-new').value = 10;
-  updateSplitPreview();
-  document.getElementById('m-split').classList.add('open');
-}
-
-function updateSplitPreview() {
-  var oldN = parseFloat(document.getElementById('split-old').value) || 0;
-  var newN = parseFloat(document.getElementById('split-new').value) || 0;
-  var preview = document.getElementById('split-preview');
-  var list = txns[curStockId] || [];
-  var affected = list.filter(function(t){ return t.type!=='股息'; }).length;
-  if (oldN > 0 && newN > 0) {
-    var ratio = newN / oldN;
-    var ratioStr = (Math.round(ratio*1e6)/1e6).toString();
-    preview.innerHTML = '換股比例：<b>1 股 → ' + ratioStr + ' 股</b><br>將調整 <b>' + affected + '</b> 筆買入／賣出交易的股數與單價（股息紀錄不受影響）';
-  } else {
-    preview.textContent = '請輸入有效比例';
-  }
-}
-
-async function confirmSplit() {
-  var oldN = parseFloat(document.getElementById('split-old').value) || 0;
-  var newN = parseFloat(document.getElementById('split-new').value) || 0;
-  if (oldN<=0 || newN<=0) { alert('請輸入有效比例'); return; }
-  var ratio = newN / oldN;
-  var st = stocks.find(function(s){ return s.id===curStockId; });
-  if (!confirm('確定要對「'+(st?st.code:'')+'」執行拆股調整（1股→'+ratio+'股）？\n此動作會修改全部歷史交易，且無法一鍵復原。')) return;
-  var btn = document.getElementById('btn-confirm-split');
-  btn.textContent='處理中…'; btn.disabled=true;
-  try {
-    await applyStockSplit(curStockId, ratio);
-    document.getElementById('m-split').classList.remove('open');
-    renderDetail();
-    alert('拆股調整完成！');
-  } catch(e) {
-    alert('調整失敗：'+e.message);
-  }
-  btn.textContent='確認執行拆股調整'; btn.disabled=false;
-}
-// ══ END STOCK SPLIT ══════════════════════════════════════════
-
 // ══ LOT PICKER ══════════════════════════════════════════════
 var pendingLots = []; // [{buyTxId, shares(input), price, date, available}]
 
@@ -3988,13 +4078,6 @@ function autoFillFIFO() {
   }
   renderLotPicker(needShares);
 }
-
-(document.getElementById('btn-split-stock')||{addEventListener:function(){}} ).addEventListener('click', openSplitModal);
-(document.getElementById('btn-confirm-split')||{addEventListener:function(){}} ).addEventListener('click', confirmSplit);
-(document.getElementById('btn-cancel-split')||{addEventListener:function(){}} ).addEventListener('click', function(){ document.getElementById('m-split').classList.remove('open'); });
-(document.getElementById('m-split')||{addEventListener:function(){}} ).addEventListener('click', function(e){ if(e.target===this) this.classList.remove('open'); });
-(document.getElementById('split-old')||{addEventListener:function(){}} ).addEventListener('input', updateSplitPreview);
-(document.getElementById('split-new')||{addEventListener:function(){}} ).addEventListener('input', updateSplitPreview);
 
 // btn-open-lots: 使用 delegation，因為 modal 內容是動態的
 document.getElementById('m-tx').addEventListener('click', function(e){
