@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55d2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55e1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1380,7 +1380,9 @@ async function renderMarketYearDividendChart(scopeStocks) {
 
 // ── 市場概覽第5張圖：年度績效（完整版：已實現＋股息＋未實現變化＋年增率／簡易版：僅已實現＋股息）──
 var curYearPerfMode = 'full'; // 'full' | 'simple'
-function getYearPerfScopeStocks() {
+var yearPerfSelectedIds = null; // null = 全部標的
+var yperfPickerOpen = false;
+function getYearPerfBaseStocks() {
   return stocks.filter(function(st){
     var s = calc(st.id, getPrice(st.id));
     if (curChartFilter==='holding' && s.cur<=0) return false;
@@ -1388,18 +1390,71 @@ function getYearPerfScopeStocks() {
     return true;
   });
 }
+function getYearPerfScopeStocks() {
+  var base = getYearPerfBaseStocks();
+  if (yearPerfSelectedIds===null) return base;
+  return base.filter(function(st){ return yearPerfSelectedIds.indexOf(st.id)!==-1; });
+}
+function buildYearPerfPicker(baseStocks) {
+  var list = document.getElementById('yperf-picker-list');
+  if (!list) return;
+  list.innerHTML = '';
+  baseStocks.forEach(function(st){
+    var checked = yearPerfSelectedIds===null || yearPerfSelectedIds.indexOf(st.id)!==-1;
+    var item = document.createElement('label');
+    item.className = 'chart-picker-item';
+    item.innerHTML = '<input type="checkbox" value="'+st.id+'"'+(checked?' checked':'')+'>'+st.name+'<span style="color:var(--text2);font-size:11px;margin-left:auto">'+st.code+'</span>';
+    item.querySelector('input').addEventListener('change', function(){
+      var allInputs = document.querySelectorAll('#yperf-picker-list input');
+      var checked2 = Array.prototype.filter.call(allInputs, function(i){ return i.checked; }).map(function(i){ return i.value; });
+      yearPerfSelectedIds = checked2.length === baseStocks.length ? null : checked2;
+      yperfPickerOpen = true;
+      renderYearPerformanceChart();
+    });
+    list.appendChild(item);
+  });
+  var countEl = document.getElementById('yperf-picker-count');
+  if (countEl) countEl.textContent = yearPerfSelectedIds===null ? '全部' : yearPerfSelectedIds.length+'/'+baseStocks.length;
+  var btn = document.getElementById('yperf-picker-toggle');
+  if (btn) btn.classList.toggle('active', yearPerfSelectedIds!==null);
+  if (yperfPickerOpen) {
+    var panel = document.getElementById('yperf-picker-panel');
+    if (panel) panel.classList.add('open');
+    yperfPickerOpen = false;
+  }
+}
 var renderYearPerformanceChart_token = 0;
 async function renderYearPerformanceChart() {
   var myToken = ++renderYearPerformanceChart_token;
   var bodyEl = document.getElementById('mktYearPerfBody');
   if (!bodyEl) return;
+  var baseStocks = getYearPerfBaseStocks();
   var scopeStocks = getYearPerfScopeStocks();
   var mode = curYearPerfMode;
 
   var allDates = [];
   scopeStocks.forEach(function(st){ (txns[st.id]||[]).forEach(function(t){ allDates.push(normDate(t.date)); }); });
+  var pickerHtml = '<div class="chart-stock-picker" id="yperf-picker">' +
+      '<button class="chart-picker-btn'+(yearPerfSelectedIds!==null?' active':'')+'" id="yperf-picker-toggle">標的 <span id="yperf-picker-count">'+(yearPerfSelectedIds===null?'全部':yearPerfSelectedIds.length+'/'+baseStocks.length)+'</span> ▾</button>' +
+      '<div class="chart-picker-panel" id="yperf-picker-panel">' +
+        '<div class="chart-picker-actions"><button id="yperf-picker-all">全選</button><button id="yperf-picker-none">清除</button></div>' +
+        '<div class="chart-picker-list" id="yperf-picker-list"></div>' +
+      '</div>' +
+    '</div>';
+  function bindYearPerfPickerUI() {
+    buildYearPerfPicker(baseStocks);
+    var toggle = document.getElementById('yperf-picker-toggle');
+    var panel = document.getElementById('yperf-picker-panel');
+    if (toggle && panel) toggle.addEventListener('click', function(e){ e.stopPropagation(); panel.classList.toggle('open'); });
+    var allBtn = document.getElementById('yperf-picker-all');
+    var noneBtn = document.getElementById('yperf-picker-none');
+    if (allBtn) allBtn.addEventListener('click', function(){ yearPerfSelectedIds=null; renderYearPerformanceChart(); });
+    if (noneBtn) noneBtn.addEventListener('click', function(){ yearPerfSelectedIds=[]; renderYearPerformanceChart(); });
+  }
   if (!allDates.length) {
-    bodyEl.innerHTML = '<div class="empty-state" style="padding:24px 12px"><div class="empty-icon">📈</div><div class="empty-msg">尚無交易紀錄</div></div>';
+    bodyEl.innerHTML = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'+pickerHtml+'</div>' +
+      '<div class="empty-state" style="padding:24px 12px"><div class="empty-icon">📈</div><div class="empty-msg">尚無交易紀錄</div></div>';
+    bindYearPerfPickerUI();
     return;
   }
   var minDate = allDates.reduce(function(m,d){ return (!m||d<m)?d:m; }, null);
@@ -1575,9 +1630,12 @@ async function renderYearPerformanceChart() {
   var lastIsPartial = years[years.length-1]===curYear;
   var lastIdx = years.length-1;
 
-  var toggleHtml = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">' +
-    '<button class="chart-tab'+(mode==='full'?' active':'')+'" id="btn-yperf-full" style="padding:4px 12px;font-size:12px">完整版</button>' +
-    '<button class="chart-tab'+(mode==='simple'?' active':'')+'" id="btn-yperf-simple" style="padding:4px 12px;font-size:12px">簡易版（已實現+股息）</button>' +
+  var toggleHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">' +
+    pickerHtml +
+    '<div style="display:flex;gap:6px">' +
+      '<button class="chart-tab'+(mode==='full'?' active':'')+'" id="btn-yperf-full" style="padding:4px 12px;font-size:12px">完整版</button>' +
+      '<button class="chart-tab'+(mode==='simple'?' active':'')+'" id="btn-yperf-simple" style="padding:4px 12px;font-size:12px">簡易版（已實現+股息）</button>' +
+    '</div>' +
   '</div>';
 
   var analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:12px 14px;flex-wrap:wrap">' +
@@ -1589,6 +1647,7 @@ async function renderYearPerformanceChart() {
     (mode==='full' && !hasHistData ? '<div style="font-size:11px;color:var(--gold);margin-bottom:10px">⚠️ 尚無台股/美股歷史股價，未實現變化暫以 0 計入</div>' : '') +
     '<div class="chart-canvas-wrap"><canvas id="mktYearPerf"></canvas></div>';
 
+  bindYearPerfPickerUI();
   var bf = document.getElementById('btn-yperf-full');
   var bs = document.getElementById('btn-yperf-simple');
   if (bf) bf.addEventListener('click', function(){ curYearPerfMode='full'; renderYearPerformanceChart(); });
@@ -3799,6 +3858,12 @@ document.addEventListener('click', function(e){
     document.querySelectorAll('#chart-picker-list input').forEach(function(i){ i.checked=false; });
     chartSelectedIds = [];
     renderCharts();
+  }
+});
+document.addEventListener('click', function(e){
+  var yPanel = document.getElementById('yperf-picker-panel');
+  if (yPanel && !yPanel.contains(e.target) && e.target!==document.getElementById('yperf-picker-toggle')) {
+    yPanel.classList.remove('open');
   }
 });
 
