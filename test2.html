@@ -321,7 +321,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56a1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56a2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -568,7 +568,7 @@ textarea.input{height:72px;resize:none}
     </div>
     <div id="eform-fund-area" style="display:none">
       <div class="field">
-        <label class="field-label" id="ef-fund-amount-label">投入金額（元）</label><span class="help-tip">?<span class="help-tip-box">基金不像股票用股數計算，是用金額比例：投入金額直接累加成本，贖回時按比例扣除，也可手動指定成本。</span></span>
+        <label class="field-label" id="ef-fund-amount-label">投入金額（元）</label>
         <input class="input" id="ef-fund-amount" type="number" inputmode="decimal" placeholder="例：50000">
       </div>
     </div>
@@ -590,7 +590,7 @@ textarea.input{height:72px;resize:none}
         <input class="input" id="ef-tax" type="number" inputmode="decimal" placeholder="0">
       </div>
       <div class="field" id="ef-sellcost-wrap" style="display:none">
-        <label class="field-label">賣出成本（每股）<span class="help-tip">?<span class="help-tip-box">留空＝系統自動用「賣出當下的平均成本」計算已實現損益；手動填入則用你指定的成本，適合想精確對帳的情況。</span></span></label>
+        <label class="field-label">賣出成本（每股）<span class="help-tip">?<span class="help-tip-box">預設為「賣出當下平均成本」；手動填入則用你指定的成本，適合想精確對帳的情況。</span></span></label>
         <input class="input" id="ef-sellcost" type="number" inputmode="decimal" placeholder="預設使用當時平均成本">
         <div class="field-hint">留空則自動使用當時平均成本；可手動填入指定成本</div>
       </div>
@@ -657,7 +657,7 @@ textarea.input{height:72px;resize:none}
     </div>
     <div id="form-fund-area" style="display:none">
       <div class="field">
-        <label class="field-label" id="f-fund-amount-label">投入金額（元）</label><span class="help-tip">?<span class="help-tip-box">基金不像股票用股數計算，是用金額比例：投入金額直接累加成本，贖回時按比例扣除，也可手動指定成本。</span></span>
+        <label class="field-label" id="f-fund-amount-label">投入金額（元）</label>
         <input class="input" id="f-fund-amount" type="number" inputmode="decimal" placeholder="例：50000">
       </div>
     </div>
@@ -681,7 +681,7 @@ textarea.input{height:72px;resize:none}
         <div class="field-hint">賣出：成交金額 × 0.3%</div>
       </div>
       <div class="field" id="f-sellcost-wrap" style="display:none">
-        <label class="field-label">賣出成本（每股）<span class="help-tip">?<span class="help-tip-box">留空＝系統自動用「賣出當下的平均成本」計算已實現損益；手動填入則用你指定的成本，或用下方「批次選擇」精確指定要賣哪幾筆。</span></span></label>
+        <label class="field-label">賣出成本（每股）<span class="help-tip">?<span class="help-tip-box">預設為「賣出當下平均成本」；手動填入則用你指定的成本，適合想精確對帳的情況；或用下方「批次選擇」精確指定要賣哪幾筆。</span></span></label>
         <input class="input" id="f-sellcost" type="number" inputmode="decimal" placeholder="留空則使用平均成本">
         <div class="field-hint" style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
           <span style="color:var(--text3);font-size:11px">留空則自動使用當時均價</span>
@@ -2151,7 +2151,7 @@ function renderPortfolio() {
     var mixedCurrencyWarning = '';
     if (hasAnyUSDinView && showMarket !== '美股') {
       if (needFx) {
-        mixedCurrencyWarning = '<div style="background:rgba(52,199,123,0.08);border:1px solid rgba(52,199,123,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px">💱 美股及美金計價基金已換算為台幣　匯率 USD/TWD = <b>'+usdRate.toFixed(2)+'</b>　<span style="opacity:0.7">'+usdRateAt+'</span><span class="help-tip">?<span class="help-tip-box" style="color:var(--text)">這裡用的是目前抓到的即時匯率換算。歷史圖表（如年度股息、年度績效）則用當時的歷史匯率換算，兩邊數字不會完全一致。</span></span></div>';
+        mixedCurrencyWarning = '<div style="background:rgba(52,199,123,0.08);border:1px solid rgba(52,199,123,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px">💱 美股及美金計價基金已換算為台幣　匯率 USD/TWD = <b>'+usdRate.toFixed(2)+'</b>　<span style="opacity:0.7">'+usdRateAt+'</span></div>';
       } else {
         mixedCurrencyWarning = '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gold);margin-bottom:12px">⚠️ 匯率抓取中，合計暫不含美元資產換算</div>';
       }
@@ -2461,7 +2461,7 @@ function renderDetail() {
       '<div class="info-row"><span class="info-label">累計投入本金'+fundCurrLabel+'</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
       (pr>0 ?
         '<div class="info-row"><span class="info-label">目前市值'+fundCurrLabel+'</span><span class="info-value">'+fc(pr)+'</span></div>' +
-        '<div class="info-row"><span class="info-label">未實現損益'+fundCurrLabel+'<span class="help-tip">?<span class="help-tip-box">未實現＝還持有部分，隨淨值波動、還沒真正拿到手；已實現＝已經贖回落袋的損益，不會再變動。</span></span></span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>'
+        '<div class="info-row"><span class="info-label">未實現損益'+fundCurrLabel+'</span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>'
       : '') +
       '<div class="divider"></div>' +
       '<div class="info-row"><span class="info-label">已實現損益（贖回）'+fundCurrLabel+'</span><span class="info-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+(s.realCost>0?' ('+fp(s.realPct)+')':'')+'</span></div>' +
@@ -2476,7 +2476,7 @@ function renderDetail() {
       '<div class="info-row"><span class="info-label">目前持倉成本'+currLabel+'</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
       (pr>0?
         '<div class="info-row"><span class="info-label">市值'+currLabel+'</span><span class="info-value">'+fc(s.mv)+'</span></div>' +
-        '<div class="info-row"><span class="info-label">未實現損益'+currLabel+'<span class="help-tip">?<span class="help-tip-box">未實現＝還持有部分，隨股價波動、還沒真正賣出落袋；已實現＝已經賣出確定的損益，不會再變動。</span></span></span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>'
+        '<div class="info-row"><span class="info-label">未實現損益'+currLabel+'</span><span class="info-value '+pcls(s.unreal)+'">'+ps(s.unreal)+fc(s.unreal)+' ('+fp(s.unrPct)+')</span></div>'
       :'') +
       '<div class="divider"></div>' +
       '<div class="info-row"><span class="info-label">已實現損益'+currLabel+'</span><span class="info-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+(s.realCost>0?' ('+fp(s.realPct)+')':'')+'</span></div>' +
