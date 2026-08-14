@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55d1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55d2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1622,7 +1622,14 @@ async function renderYearPerformanceChart() {
         legend:{ position:'bottom', labels:{color:'#e8f0fe', font:{size:12}, padding:12} },
         tooltip:{callbacks:{
           label:function(ctx){
-            if (ctx.dataset.label==='年增率') return ctx.parsed.y!=null ? '年增率: '+(ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%' : '—';
+            if (ctx.dataset.label==='年增率') {
+              var i = ctx.dataIndex;
+              var total = realArr[i] + divArr[i] + (mode==='full' ? unrArr[i] : 0);
+              return [
+                '年增率: ' + (ctx.parsed.y!=null ? (ctx.parsed.y>=0?'+':'')+ctx.parsed.y.toFixed(2)+'%' : '—'),
+                '年度總績效: ' + (total>=0?'+':'') + '$' + Math.round(total).toLocaleString('zh-TW')
+              ];
+            }
             return ctx.dataset.label+': $'+Math.round(ctx.parsed.y).toLocaleString('zh-TW');
           }
         }}
