@@ -250,6 +250,25 @@ textarea.input{height:72px;resize:none}
 .wl-height-input { width:48px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:13px; text-align:center; font-family:inherit; }
 .wl-rows-btn { width:32px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:18px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit; line-height:1; padding:0; }
 .wl-col-toggle { display:flex; align-items:center; gap:4px; font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid var(--border,#2a3d55); color:var(--mute,#8899aa); cursor:pointer; user-select:none; transition:all 0.15s; }
+
+/* ── Help tab ── */
+.help-section{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.help-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;font-size:15px;font-weight:700}
+.help-header .chev{color:var(--text3);font-size:12px;transition:transform 0.2s}
+.help-section.open .help-header .chev{transform:rotate(180deg)}
+.help-body{max-height:0;overflow:hidden;transition:max-height 0.25s ease}
+.help-section.open .help-body{max-height:4000px}
+.help-body-inner{padding:0 16px 16px;font-size:13px;color:var(--text2);line-height:1.7}
+.help-body-inner h4{font-size:12px;color:var(--accent2);margin:14px 0 6px;font-weight:700}
+.help-body-inner h4:first-child{margin-top:0}
+.help-body-inner ul{padding-left:18px;margin:4px 0 10px}
+.help-body-inner li{margin-bottom:4px}
+.help-body-inner b{color:var(--text)}
+.help-body-inner code{background:var(--bg3);border-radius:4px;padding:1px 5px;font-family:monospace;font-size:12px;color:var(--accent2)}
+/* ── Help tip (inline "?" popover) ── */
+.help-tip{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;margin-left:4px;position:relative;vertical-align:middle;font-family:inherit}
+.help-tip-box{display:none;position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--accent);border-radius:8px;padding:9px 11px;font-size:11px;color:var(--text);width:200px;z-index:80;line-height:1.55;text-align:left;font-weight:400;white-space:normal;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.help-tip.open .help-tip-box{display:block}
 .wl-col-toggle input { display:none; }
 .wl-col-toggle.active { background:rgba(61,142,240,0.15); border-color:#3d8ef0; color:#3d8ef0; }
 @media(max-width:640px){
@@ -302,7 +321,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55e2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56a2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -311,6 +330,7 @@ textarea.input{height:72px;resize:none}
       <button class="tab-btn" data-tab="charts">📈 分析</button>
       <button class="tab-btn" data-tab="watchlist">📋 看板</button>
       <button class="tab-btn" data-tab="data">📁 資料</button>
+      <button class="tab-btn" data-tab="help">❓ 說明</button>
     </div>
   </div>
 
@@ -399,6 +419,117 @@ textarea.input{height:72px;resize:none}
 
 <!-- Watchlist Tab -->
 <div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div><div class="wl-height-tools"><span class="wl-toolbar-label">表格大小</span><button type="button" id="btn-rows-dec" class="wl-rows-btn">−</button><input id="wl-visible-rows" class="wl-height-input" type="number" min="3" max="30" step="1" inputmode="numeric"><button type="button" id="btn-rows-inc" class="wl-rows-btn">+</button></div></div><div id="wl-table-wrap"></div></div>
+
+<!-- Help Tab -->
+<div class="tab-content" id="tab-help">
+
+<div class="help-section open" data-help="quickstart">
+  <div class="help-header"><span>🚀 快速上手</span><span class="chev">▾</span></div>
+  <div class="help-body"><div class="help-body-inner">
+    <h4>新增標的</h4>
+    <ul>
+      <li>右上角「＋」新增，選擇市場：<b>台股 / 美股 / 基金</b>，三種市場的欄位邏輯不同</li>
+      <li>基金需額外選擇扣款幣別（TWD 或 USD），會影響之後所有金額顯示</li>
+      <li>台股填股票代號（如 2330），美股填英文代號（如 AAPL）</li>
+    </ul>
+    <h4>新增交易</h4>
+    <ul>
+      <li><b>買入</b>／<b>再投入</b>：增加持股或投入金額</li>
+      <li><b>賣出</b>：減少持股，可留空自動用當時均價計算成本，或手動指定，或用「批次選擇」精確指定要賣哪幾筆</li>
+      <li><b>股息</b>：純收入，不影響持股/成本，只計入累計配息</li>
+    </ul>
+    <h4>CSV 匯入／匯出</h4>
+    <ul>
+      <li>「資料」頁可下載交易紀錄或損益摘要 CSV，也可用同格式的 CSV 批次匯入</li>
+      <li>匯入時標的代號重複會自動合併到既有標的底下，不會重複建立</li>
+    </ul>
+  </div></div>
+</div>
+
+<div class="help-section" data-help="terms">
+  <div class="help-header"><span>📖 名詞解釋</span><span class="chev">▾</span></div>
+  <div class="help-body"><div class="help-body-inner">
+    <ul>
+      <li><b>平均成本</b>：目前持股的加權平均買入單價（賣出不影響均價，只減少股數與對應成本）</li>
+      <li><b>持倉成本</b>：目前持股數 × 平均成本，也就是還沒賣出部分總共花了多少錢</li>
+      <li><b>已實現損益</b>：已經賣出的部分，賣出金額扣掉當時的成本，是「已經落袋」的損益</li>
+      <li><b>未實現損益</b>：還持有部分，目前市值扣掉持倉成本，會隨現價波動、還沒真正拿到手</li>
+      <li><b>未實現報酬率</b>：未實現損益 ÷ 持倉成本，只看還持有這部分的漲跌幅</li>
+      <li><b>總報酬率（含股息）</b>：（已實現＋股息＋未實現）÷ 投入成本，是這檔標的從頭到現在的整體報酬</li>
+      <li><b>加權成本</b>：用「批次選擇」指定要賣哪幾筆買入時，系統依你分配的股數比例算出的綜合成本</li>
+      <li><b>拆股／反向併股</b>：等比例調整<b>全部歷史交易</b>的股數與單價（總金額不變），讓過去和現在的股數基準一致；股息紀錄不受影響</li>
+    </ul>
+  </div></div>
+</div>
+
+<div class="help-section" data-help="formulas">
+  <div class="help-header"><span>🧮 計算公式怎麼算</span><span class="chev">▾</span></div>
+  <div class="help-body"><div class="help-body-inner">
+    <h4>股票／ETF（用股數計算）</h4>
+    <ul>
+      <li>買入：<code>均價 = 累計成本 ÷ 累計股數</code>，逐筆買入會重新加權平均</li>
+      <li>賣出：預設用「賣出當下的均價」當成本，也可以手動填「賣出成本」，或用「批次選擇」指定確切是哪幾筆買入的股票被賣掉（會影響已實現損益的精確度）</li>
+      <li>已實現損益 = 賣出實收金額 − 這筆賣出對應的成本</li>
+    </ul>
+    <h4>基金（用金額比例計算，沒有股數概念）</h4>
+    <ul>
+      <li>投入金額直接累加成「投入本金」</li>
+      <li>贖回時：按「贖回金額 ÷ 累計投入本金」的比例扣除對應成本（也可手動指定成本）</li>
+      <li>市值＝你手動輸入的最新淨值，不會自動抓價</li>
+    </ul>
+    <h4>美股／USD 計價基金的匯率</h4>
+    <ul>
+      <li>「組合」「分析」等頁面顯示台幣合計時，用<b>當下即時匯率</b>換算</li>
+      <li>「年度股息」「年度績效」等歷史圖表，則用<b>當時的歷史匯率</b>換算對應年度/當日的金額，跟即時匯率換算的合計數字不會完全一致，屬正常現象</li>
+    </ul>
+    <h4>年度績效（完整版 vs 簡易版）</h4>
+    <ul>
+      <li><b>完整版</b> = 已實現損益 ＋ 股息 ＋ 未實現變化（用歷史股價回推台股/美股當年市值變化；基金沒有歷史淨值，不計入未實現變化）</li>
+      <li><b>簡易版</b> = 已實現損益 ＋ 股息，不含未實現變化，不需抓歷史股價，速度較快</li>
+      <li><b>年增率</b>：完整版分母是「該年期初市值」（歷史股價回推，基金以投入成本估算）；簡易版分母是「該年期初累計投入成本」，兩者算法不同、數字不能直接比較</li>
+    </ul>
+  </div></div>
+</div>
+
+<div class="help-section" data-help="charts">
+  <div class="help-header"><span>📈 圖表怎麼看</span><span class="chev">▾</span></div>
+  <div class="help-body"><div class="help-body-inner">
+    <ul>
+      <li><b>市場概覽 vs 個股配置</b>：市場概覽是台股/美股/基金三大類的總覽，個股配置是拆到每個標的層級</li>
+      <li><b>損益</b>：長條圖顯示各標的的已實現/未實現損益，疊加線是報酬率</li>
+      <li><b>配息</b>：各標的累計股息收入排行</li>
+      <li><b>泡泡</b>：泡泡大小＝市值，X/Y 軸可切換看「累積損益」或「單日變動」</li>
+      <li><b>淨值走勢</b>：用歷史股價逐日回推整體市值變化，第一次載入較久（要抓歷史股價），之後切換期間會快很多</li>
+      <li><b>年度股息 / 年度績效</b>：都在「市場概覽」裡，依交易發生的年份分桶統計</li>
+    </ul>
+  </div></div>
+</div>
+
+<div class="help-section" data-help="watchlist">
+  <div class="help-header"><span>📋 看板頁</span><span class="chev">▾</span></div>
+  <div class="help-body"><div class="help-body-inner">
+    <ul>
+      <li>上方「顯示欄位」可勾選要看哪些欄位（股數、現價、成本、市值、損益…）</li>
+      <li>點欄位標題可以排序，再點一次切換升冪/降冪</li>
+      <li>「表格大小」可以調整一次顯示幾列，數字越大表格越高</li>
+      <li>只顯示目前<b>持有中</b>的標的，已出清的不會出現在看板</li>
+    </ul>
+  </div></div>
+</div>
+
+<div class="help-section" data-help="faq">
+  <div class="help-header"><span>❓ 常見問題</span><span class="chev">▾</span></div>
+  <div class="help-body"><div class="help-body-inner">
+    <ul>
+      <li><b>為什麼未實現損益顯示「—」？</b>　還沒抓到現價（股票）或還沒輸入淨值（基金），輸入/抓到之後就會出現數字</li>
+      <li><b>為什麼美股/基金金額看起來跟我預期的不一樣？</b>　可能是匯率換算時機不同：即時頁面用當下匯率，歷史圖表用當時歷史匯率，兩者會有落差</li>
+      <li><b>拆股調整後，舊的交易紀錄會被改嗎？</b>　會。拆股會直接等比例改寫<b>全部歷史交易</b>的股數與單價（總金額不變），且無法一鍵復原，建議先到「資料」頁匯出備份</li>
+      <li><b>資料存在哪裡？</b>　存在你的 Firebase 帳號雲端，同時會在手機/瀏覽器本機留一份快取加快載入，「清除全部資料」會把雲端資料整個刪除，無法復原</li>
+    </ul>
+  </div></div>
+</div>
+
+</div>
   </div>
 </div>
 
@@ -459,7 +590,7 @@ textarea.input{height:72px;resize:none}
         <input class="input" id="ef-tax" type="number" inputmode="decimal" placeholder="0">
       </div>
       <div class="field" id="ef-sellcost-wrap" style="display:none">
-        <label class="field-label">賣出成本（每股）</label>
+        <label class="field-label">賣出成本（每股）<span class="help-tip">?<span class="help-tip-box">預設為「賣出當下平均成本」；手動填入則用你指定的成本，適合想精確對帳的情況。</span></span></label>
         <input class="input" id="ef-sellcost" type="number" inputmode="decimal" placeholder="預設使用當時平均成本">
         <div class="field-hint">留空則自動使用當時平均成本；可手動填入指定成本</div>
       </div>
@@ -550,7 +681,7 @@ textarea.input{height:72px;resize:none}
         <div class="field-hint">賣出：成交金額 × 0.3%</div>
       </div>
       <div class="field" id="f-sellcost-wrap" style="display:none">
-        <label class="field-label">賣出成本（每股）</label>
+        <label class="field-label">賣出成本（每股）<span class="help-tip">?<span class="help-tip-box">預設為「賣出當下平均成本」；手動填入則用你指定的成本，適合想精確對帳的情況；或用下方「批次選擇」精確指定要賣哪幾筆。</span></span></label>
         <input class="input" id="f-sellcost" type="number" inputmode="decimal" placeholder="留空則使用平均成本">
         <div class="field-hint" style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
           <span style="color:var(--text3);font-size:11px">留空則自動使用當時均價</span>
@@ -618,7 +749,7 @@ textarea.input{height:72px;resize:none}
         <span id="lot-need-shares" style="font-weight:700">— 股</span>
       </div>
       <div style="display:flex;justify-content:space-between">
-        <span style="color:var(--text2)">加權成本/股</span>
+        <span style="color:var(--text2)">加權成本/股<span class="help-tip">?<span class="help-tip-box">依你分配給每一批買入的股數比例，加權平均算出來的綜合賣出成本。</span></span></span>
         <span id="lot-weighted-cost" style="font-weight:700;color:var(--accent2)">—</span>
       </div>
     </div>
@@ -1637,7 +1768,7 @@ async function renderYearPerformanceChart() {
 
   var analysisHtml = '<div style="display:flex;gap:0;margin-bottom:14px;background:var(--bg3);border-radius:12px;padding:12px 14px;flex-wrap:wrap">' +
     '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">'+years[lastIdx]+' 年'+(lastIsPartial?'（進行中）':'')+' 總績效</div><div style="font-size:14px;font-weight:700;font-family:monospace" class="'+pcls(totalByYear[lastIdx])+'">'+ps(totalByYear[lastIdx])+fc(totalByYear[lastIdx])+'</div></div>' +
-    '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增率</div><div style="font-size:14px;font-weight:700;font-family:monospace" class="'+(pctByYear[lastIdx]===null?'muted':pcls(pctByYear[lastIdx]))+'">'+(pctByYear[lastIdx]===null?'—':fp(pctByYear[lastIdx]))+'</div></div>' +
+    '<div style="flex:1;min-width:100px"><div style="font-size:11px;color:var(--text3);margin-bottom:3px">年增率<span class="help-tip">?<span class="help-tip-box">完整版分母是該年期初市值（歷史股價回推，基金以投入成本估算）；簡易版分母是該年期初累計投入成本。兩者算法不同，數字不能直接比較。</span></span></div><div style="font-size:14px;font-weight:700;font-family:monospace" class="'+(pctByYear[lastIdx]===null?'muted':pcls(pctByYear[lastIdx]))+'">'+(pctByYear[lastIdx]===null?'—':fp(pctByYear[lastIdx]))+'</div></div>' +
   '</div>';
 
   bodyEl.innerHTML = toggleHtml + analysisHtml +
@@ -3710,7 +3841,7 @@ async function clearAllData() {
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
   document.querySelectorAll('.tab-content').forEach(function(c){ c.classList.toggle('active', c.id==='tab-'+tab); });
-  var titles={portfolio:'投資組合',charts:'分析圖表',import:'匯入資料',data:'資料管理',watchlist:'持倉看板'};
+  var titles={portfolio:'投資組合',charts:'分析圖表',import:'匯入資料',data:'資料管理',watchlist:'持倉看板',help:'使用說明'};
   document.getElementById('tab-title').textContent=titles[tab];
   if (tab==='portfolio') { document.getElementById('header-action-btn').style.display=''; renderPortfolio(); }
   else if (tab==='charts') { document.getElementById('header-action-btn').style.display='none'; renderCharts(); }
@@ -3718,6 +3849,7 @@ function switchTab(tab) {
   else if (tab==='export') { document.getElementById('header-action-btn').style.display='none'; }
   else if (tab==='data') { document.getElementById('header-action-btn').style.display='none'; }
   else if (tab==='watchlist') { document.getElementById('header-action-btn').style.display='none'; renderWatchlist(); }
+  else if (tab==='help') { document.getElementById('header-action-btn').style.display='none'; }
 }
 
 // ── Auth ───────────────────────────────────────────────────
@@ -4339,6 +4471,28 @@ document.getElementById('m-lot-picker').addEventListener('click', function(e){
 });
 // ══ END LOT PICKER ══════════════════════════════════════════
 window.addEventListener('resize', function(){ applyWlTableHeight(); renderWatchlistTable(); });
+
+// ══ HELP TAB：accordion 展開/收合 ══════════════════════════════
+document.addEventListener('click', function(e){
+  var header = e.target.closest('.help-header');
+  if (header) {
+    var section = header.closest('.help-section');
+    if (section) section.classList.toggle('open');
+  }
+});
+
+// ══ HELP TIP：欄位旁「?」小提示 popover ══════════════════════════
+document.addEventListener('click', function(e){
+  var tip = e.target.closest('.help-tip');
+  if (tip) {
+    var wasOpen = tip.classList.contains('open');
+    document.querySelectorAll('.help-tip.open').forEach(function(t){ t.classList.remove('open'); });
+    if (!wasOpen) tip.classList.add('open');
+    e.stopPropagation();
+  } else {
+    document.querySelectorAll('.help-tip.open').forEach(function(t){ t.classList.remove('open'); });
+  }
+});
 
 </script>
 <!-- ══ EDIT STOCK MODAL ══ -->
