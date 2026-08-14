@@ -302,7 +302,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55e1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v55e2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1383,12 +1383,9 @@ var curYearPerfMode = 'full'; // 'full' | 'simple'
 var yearPerfSelectedIds = null; // null = 全部標的
 var yperfPickerOpen = false;
 function getYearPerfBaseStocks() {
-  return stocks.filter(function(st){
-    var s = calc(st.id, getPrice(st.id));
-    if (curChartFilter==='holding' && s.cur<=0) return false;
-    if (curChartFilter==='sold' && s.cur>0) return false;
-    return true;
-  });
+  // 年度績效是回顧所有年份的績效，已出清的標的也該計入（其已實現損益仍有效），
+  // 不套用「持有中/已出清」篩選（該篩選列在市場概覽分頁本來就是隱藏的）
+  return stocks.slice();
 }
 function getYearPerfScopeStocks() {
   var base = getYearPerfBaseStocks();
