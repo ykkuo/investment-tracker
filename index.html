@@ -964,7 +964,7 @@ async function savePriceDb(sid, price) {
 }
 
 // ── Price fetching ─────────────────────────────────────────
-const PROXY = 'https://corsproxy.io/?url=';
+const PROXY = 'https://api.allorigins.win/raw?url=';
 const YF = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
 async function fetchPrice(sid, code, market) {
