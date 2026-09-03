@@ -321,7 +321,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56a4</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56a5</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -781,6 +781,7 @@ var uid = null;
 var stocks = [];      // [{id, code, name, market, lastPrice, lastPriceAt}]
 var txns = {};        // {stockId: [{id, type, date, shares, price, total, note}]}
 var priceCache = {};  // {stockId: {price, at}}
+var priceFetchStatus = {}; // {stockId: true=本次抓到新報價, false=沿用舊價}
 var curStockId = null;
 var curMarket = '台股';
 var curCurrency = 'TWD'; // 基金扣款幣別
@@ -967,9 +968,7 @@ async function savePriceDb(sid, price, prevClose) {
 const PROXY = 'https://api.allorigins.win/raw?url=';
 const YF = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
-async function fetchYahooJson(targetUrl) {
-  // Jina Reader supports browser CORS and returns the upstream JSON after a short
-  // Markdown header. allorigins remains as a fallback in case its rate limit clears.
+async function fetchTextWithFallback(targetUrl) {
   const sources = [
     'https://r.jina.ai/http://' + targetUrl.replace(/^https?:\/\//, ''),
     PROXY + encodeURIComponent(targetUrl)
@@ -978,15 +977,11 @@ async function fetchYahooJson(targetUrl) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12000);
     try {
-      const res = await fetch(url, { signal: ctrl.signal });
+      const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
       if (!res.ok) continue;
       const text = await res.text();
-      const jsonStart = text.indexOf('{"chart"');
-      if (jsonStart < 0) continue;
-      const json = JSON.parse(text.slice(jsonStart));
-      if (json?.chart?.result?.[0]) return json;
+      if (text && text.trim()) return text;
     } catch(e) {
-      // Try the next source.
     } finally {
       clearTimeout(timer);
     }
@@ -994,7 +989,29 @@ async function fetchYahooJson(targetUrl) {
   return null;
 }
 
+async function fetchJsonDocument(targetUrl) {
+  const text = await fetchTextWithFallback(targetUrl);
+  if (!text) return null;
+  const trimmed = text.trim();
+  try { return JSON.parse(trimmed); } catch(e) {}
+  const starts = [trimmed.indexOf('{'), trimmed.indexOf('[')].filter(i => i >= 0);
+  if (!starts.length) return null;
+  const start = Math.min(...starts);
+  const endObj = trimmed.lastIndexOf('}');
+  const endArr = trimmed.lastIndexOf(']');
+  const end = Math.max(endObj, endArr);
+  if (end < start) return null;
+  try { return JSON.parse(trimmed.slice(start, end + 1)); } catch(e) { return null; }
+}
+
+async function fetchYahooJson(targetUrl) {
+  const json = await fetchJsonDocument(targetUrl);
+  if (json?.chart?.result?.[0]) return json;
+  return null;
+}
+
 async function fetchPrice(sid, code, market) {
+  priceFetchStatus[sid] = false;
   let tickers = [];
   if (market === '台股' || market === '基金') tickers = [code+'.TW', code+'.TWO'];
   else tickers = [code, code+'.US'];
@@ -1008,6 +1025,7 @@ async function fetchPrice(sid, code, market) {
       const prevClose = meta?.previousClose || meta?.chartPreviousClose || 0;
       if (price > 0) {
         await savePriceDb(sid, price, prevClose);
+        priceFetchStatus[sid] = true;
         return price;
       }
     } catch(e) { continue; }
@@ -1034,13 +1052,8 @@ async function fetchDividendCalendar() {
   if (divCalCache) return divCalCache;
   var map = {};
   try {
-    const url = PROXY + encodeURIComponent('https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL');
-    const ctrl = new AbortController();
-    const timer = setTimeout(function(){ctrl.abort();}, 15000);
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      const json = await res.json();
+    const json = await fetchJsonDocument('https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL');
+    if (Array.isArray(json)) {
       (json||[]).forEach(function(row){
         var code = row && (row.Code||row.code);
         var dateStr = row && String(row.Date||row.date||'');
@@ -1072,10 +1085,22 @@ function nextDividendFor(code) {
 async function fetchAllPrices() {
   document.getElementById('header-sub').textContent = '更新價格中…';
   await fetchUsdRate();
-  const promises = stocks.filter(st => st.market!=='基金').map(st => fetchPrice(st.id, st.code, st.market));
+  priceFetchStatus = {};
+  const quoteStocks = stocks.filter(st => st.market!=='基金');
+  const promises = quoteStocks.map(st => fetchPrice(st.id, st.code, st.market));
   await Promise.all(promises);
   saveLocalCache();
-  document.getElementById('header-sub').textContent = '價格已更新 ' + new Date().toLocaleTimeString('zh-TW') + ' (報價可能延遲)';
+  const updated = quoteStocks.filter(st => priceFetchStatus[st.id]).length;
+  const failed = quoteStocks.filter(st => !priceFetchStatus[st.id]);
+  const now = new Date().toLocaleTimeString('zh-TW');
+  if (!quoteStocks.length) {
+    document.getElementById('header-sub').textContent = '沒有需要自動更新的股票';
+  } else if (!failed.length) {
+    document.getElementById('header-sub').textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + now + ' (報價可能延遲)';
+  } else {
+    const failedCodes = failed.slice(0,4).map(st => st.code).join('、') + (failed.length>4?'…':'');
+    document.getElementById('header-sub').textContent = '更新 ' + updated + '/' + quoteStocks.length + '；' + failed.length + ' 支沿用舊價：' + failedCodes;
+  }
   renderPortfolio();
 }
 
@@ -1088,13 +1113,8 @@ async function fetchHistPrices(sid, code, market, period1, period2) {
   for (var i=0;i<tickers.length;i++) {
     var ticker = tickers[i];
     try {
-      const url = PROXY + encodeURIComponent(YF + ticker + '?interval=1d&period1='+period1+'&period2='+period2);
-      const ctrl = new AbortController();
-      const timer = setTimeout(function(){ctrl.abort();}, 15000);
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const json = await res.json();
+      const json = await fetchYahooJson(YF + ticker + '?interval=1d&period1='+period1+'&period2='+period2);
+      if (!json) continue;
       const result = json && json.chart && json.chart.result && json.chart.result[0];
       const ts = result && result.timestamp;
       const closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
@@ -1116,13 +1136,8 @@ async function fetchHistPrices(sid, code, market, period1, period2) {
 async function fetchHistFx(period1, period2) {
   if (histFxCache && histFxCache.dates.length) return histFxCache;
   try {
-    const url = PROXY + encodeURIComponent(YF + 'USDTWD=X?interval=1d&period1='+period1+'&period2='+period2);
-    const ctrl = new AbortController();
-    const timer = setTimeout(function(){ctrl.abort();}, 15000);
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (res.ok) {
-      const json = await res.json();
+    const json = await fetchYahooJson(YF + 'USDTWD=X?interval=1d&period1='+period1+'&period2='+period2);
+    if (json) {
       const result = json && json.chart && json.chart.result && json.chart.result[0];
       const ts = result && result.timestamp;
       const closes = result && result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
