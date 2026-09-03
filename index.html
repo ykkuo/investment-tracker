@@ -81,6 +81,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-seri
 .price-label{font-size:12px;color:var(--text2);flex:1}
 .price-auto{font-size:15px;font-weight:700;font-family:monospace;text-align:right}
 .price-time{font-size:10px;color:var(--text3);text-align:right;margin-top:2px}
+.price-time.quote-fresh{color:var(--green)}
+.price-time.quote-cache{color:var(--gold)}
 .stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
 .stat-box{padding:8px;border-radius:8px;background:var(--bg3)}
 .stat-label{font-size:10px;color:var(--text3);margin-bottom:3px}
@@ -321,7 +323,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56a5</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -780,8 +782,8 @@ const db = firebase.firestore();
 var uid = null;
 var stocks = [];      // [{id, code, name, market, lastPrice, lastPriceAt}]
 var txns = {};        // {stockId: [{id, type, date, shares, price, total, note}]}
-var priceCache = {};  // {stockId: {price, at}}
-var priceFetchStatus = {}; // {stockId: true=本次抓到新報價, false=沿用舊價}
+var priceCache = {};  // {stockId: {price, prevClose, at, source, exchange}}
+var priceFetchStatus = {}; // {stockId: {fresh, source, usedCache}}
 var curStockId = null;
 var curMarket = '台股';
 var curCurrency = 'TWD'; // 基金扣款幣別
@@ -894,7 +896,13 @@ async function loadData() {
   snap.docs.forEach(function(doc) {
     const st = { id: doc.id, ...doc.data() };
     stocks.push(st);
-    if (st.lastPrice) priceCache[doc.id] = { price: st.lastPrice, prevClose: st.previousClose || 0, at: st.lastPriceAt || '' };
+    if (st.lastPrice) priceCache[doc.id] = {
+      price: st.lastPrice,
+      prevClose: st.previousClose || 0,
+      at: st.lastPriceAt || '',
+      source: st.lastPriceSource || 'cache',
+      exchange: st.lastPriceExchange || ''
+    };
   });
 
   setProgress(30, '並行載入交易紀錄…');
@@ -958,15 +966,23 @@ async function updateTxDb(sid, txid, data) {
   netWorthBaseCache = null;
 }
 
-async function savePriceDb(sid, price, prevClose) {
-  const at = new Date().toISOString();
-  priceCache[sid] = { price, prevClose: prevClose || 0, at };
-  await stocksRef().doc(sid).update({ lastPrice: price, previousClose: prevClose || 0, lastPriceAt: at });
+async function savePriceDb(sid, price, prevClose, quoteAt, source, exchange) {
+  const at = quoteAt || new Date().toISOString();
+  const quoteSource = source || 'manual';
+  priceCache[sid] = { price, prevClose: prevClose || 0, at, source: quoteSource, exchange: exchange || '' };
+  await stocksRef().doc(sid).update({
+    lastPrice: price,
+    previousClose: prevClose || 0,
+    lastPriceAt: at,
+    lastPriceSource: quoteSource,
+    lastPriceExchange: exchange || ''
+  });
 }
 
 // ── Price fetching ─────────────────────────────────────────
 const PROXY = 'https://api.allorigins.win/raw?url=';
 const YF = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+const TWSE_MIS = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp';
 
 async function fetchTextWithFallback(targetUrl) {
   const sources = [
@@ -1010,10 +1026,105 @@ async function fetchYahooJson(targetUrl) {
   return null;
 }
 
-async function fetchPrice(sid, code, market) {
-  priceFetchStatus[sid] = false;
+function parseQuoteNumber(value) {
+  if (value===null || value===undefined) return 0;
+  const n = parseFloat(String(value).replace(/,/g, '').trim());
+  return isFinite(n) && n > 0 ? n : 0;
+}
+
+function misQuoteAt(row) {
+  const tlong = Number(row && row.tlong);
+  if (isFinite(tlong) && tlong > 0) {
+    const ms = tlong < 100000000000 ? tlong * 1000 : tlong;
+    const d = new Date(ms);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  const date = String(row && row.d || '').replace(/\D/g, '');
+  const time = String(row && row.t || '').trim();
+  if (date.length===8) {
+    const hhmmss = /^\d{1,2}:\d{2}:\d{2}$/.test(time) ? time : '00:00:00';
+    const iso = date.slice(0,4)+'-'+date.slice(4,6)+'-'+date.slice(6,8)+'T'+hhmmss+'+08:00';
+    const d = new Date(iso);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+async function fetchMisJson(targetUrl) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch(targetUrl, { signal: ctrl.signal, cache: 'no-store', credentials: 'omit' });
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json && json.msgArray)) return json;
+    }
+  } catch(e) {
+  } finally {
+    clearTimeout(timer);
+  }
+  const json = await fetchJsonDocument(targetUrl);
+  return Array.isArray(json && json.msgArray) ? json : null;
+}
+
+async function storeFreshQuote(st, quote) {
+  priceFetchStatus[st.id] = { fresh:true, source:quote.source, usedCache:false };
+  try {
+    await savePriceDb(st.id, quote.price, quote.prevClose, quote.at, quote.source, quote.exchange);
+  } catch(e) {
+    // 報價已成功取得並保留在記憶體；Firestore 寫入失敗不應被誤判為抓價失敗。
+  }
+}
+
+async function fetchTwseMisPrices(twStocks) {
+  const updated = new Set();
+  twStocks.forEach(function(st){
+    priceFetchStatus[st.id] = { fresh:false, source:'cache', usedCache:!!(priceCache[st.id] && priceCache[st.id].price) };
+  });
+  // 每檔同時詢問上市與上櫃代碼；MIS 只會回傳實際存在的市場資料。
+  const chunkSize = 40;
+  for (let start=0; start<twStocks.length; start+=chunkSize) {
+    const chunk = twStocks.slice(start, start+chunkSize);
+    const channels = [];
+    chunk.forEach(function(st){
+      const code = String(st.code || '').trim();
+      channels.push('tse_'+code+'.tw', 'otc_'+code+'.tw');
+    });
+    const url = TWSE_MIS + '?ex_ch=' + encodeURIComponent(channels.join('|')) + '&json=1&delay=0&_=' + Date.now();
+    let json = null;
+    try { json = await fetchMisJson(url); } catch(e) {}
+    if (!json) continue;
+    const rowsByCode = {};
+    json.msgArray.forEach(function(row){
+      const code = String(row && row.c || '').trim();
+      const price = parseQuoteNumber(row && row.z);
+      if (code && price > 0 && !rowsByCode[code]) rowsByCode[code] = row;
+    });
+    const writes = [];
+    chunk.forEach(function(st){
+      const row = rowsByCode[String(st.code || '').trim()];
+      if (!row) return;
+      updated.add(st.id);
+      writes.push(storeFreshQuote(st, {
+        price: parseQuoteNumber(row.z),
+        prevClose: parseQuoteNumber(row.y),
+        at: misQuoteAt(row),
+        source: 'TWSE MIS',
+        exchange: String(row.ex || '').toLowerCase()
+      }));
+    });
+    await Promise.all(writes);
+  }
+  return updated;
+}
+
+async function fetchYahooPrice(st) {
+  const sid=st.id, code=st.code, market=st.market;
+  if (!priceFetchStatus[sid]) {
+    priceFetchStatus[sid] = { fresh:false, source:'cache', usedCache:!!(priceCache[sid] && priceCache[sid].price) };
+  }
   let tickers = [];
-  if (market === '台股' || market === '基金') tickers = [code+'.TW', code+'.TWO'];
+  if (market === '台股') tickers = [code+'.TW', code+'.TWO'];
   else tickers = [code, code+'.US'];
 
   for (const ticker of tickers) {
@@ -1021,17 +1132,28 @@ async function fetchPrice(sid, code, market) {
       const json = await fetchYahooJson(YF + ticker + '?interval=1d&range=1d');
       if (!json) continue;
       const meta = json?.chart?.result?.[0]?.meta;
-      const price = meta?.regularMarketPrice;
-      const prevClose = meta?.previousClose || meta?.chartPreviousClose || 0;
+      const price = parseQuoteNumber(meta?.regularMarketPrice);
+      const prevClose = parseQuoteNumber(meta?.previousClose || meta?.chartPreviousClose);
       if (price > 0) {
-        await savePriceDb(sid, price, prevClose);
-        priceFetchStatus[sid] = true;
+        const marketTime = Number(meta?.regularMarketTime);
+        const at = marketTime > 0 ? new Date(marketTime*1000).toISOString() : new Date().toISOString();
+        await storeFreshQuote(st, {price:price, prevClose:prevClose, at:at, source:'Yahoo', exchange:''});
         return price;
       }
     } catch(e) { continue; }
   }
   // Fallback to last cached price
   return priceCache[sid]?.price || 0;
+}
+
+async function fetchPrice(sid, code, market) {
+  const st = stocks.find(function(s){ return s.id===sid; }) || {id:sid, code:code, market:market};
+  priceFetchStatus[sid] = { fresh:false, source:'cache', usedCache:!!(priceCache[sid] && priceCache[sid].price) };
+  if (market === '台股') {
+    const updated = await fetchTwseMisPrices([st]);
+    if (updated.has(sid)) return priceCache[sid].price;
+  }
+  return fetchYahooPrice(st);
 }
 
 async function fetchUsdRate() {
@@ -1084,22 +1206,29 @@ function nextDividendFor(code) {
 
 async function fetchAllPrices() {
   document.getElementById('header-sub').textContent = '更新價格中…';
-  await fetchUsdRate();
   priceFetchStatus = {};
   const quoteStocks = stocks.filter(st => st.market!=='基金');
-  const promises = quoteStocks.map(st => fetchPrice(st.id, st.code, st.market));
-  await Promise.all(promises);
+  const twStocks = quoteStocks.filter(st => st.market==='台股');
+  const usStocks = quoteStocks.filter(st => st.market==='美股');
+  const usdRatePromise = fetchUsdRate();
+  const misUpdated = await fetchTwseMisPrices(twStocks);
+  const yahooFallbackStocks = twStocks.filter(function(st){ return !misUpdated.has(st.id); });
+  await Promise.all([usdRatePromise].concat(yahooFallbackStocks.concat(usStocks).map(fetchYahooPrice)));
   saveLocalCache();
-  const updated = quoteStocks.filter(st => priceFetchStatus[st.id]).length;
-  const failed = quoteStocks.filter(st => !priceFetchStatus[st.id]);
+  const updated = quoteStocks.filter(st => priceFetchStatus[st.id] && priceFetchStatus[st.id].fresh).length;
+  const failed = quoteStocks.filter(st => !priceFetchStatus[st.id] || !priceFetchStatus[st.id].fresh);
+  const cached = failed.filter(st => priceFetchStatus[st.id] && priceFetchStatus[st.id].usedCache);
+  const unavailable = failed.length - cached.length;
   const now = new Date().toLocaleTimeString('zh-TW');
   if (!quoteStocks.length) {
     document.getElementById('header-sub').textContent = '沒有需要自動更新的股票';
   } else if (!failed.length) {
-    document.getElementById('header-sub').textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + now + ' (報價可能延遲)';
+    document.getElementById('header-sub').textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + now;
   } else {
-    const failedCodes = failed.slice(0,4).map(st => st.code).join('、') + (failed.length>4?'…':'');
-    document.getElementById('header-sub').textContent = '更新 ' + updated + '/' + quoteStocks.length + '；' + failed.length + ' 支沿用舊價：' + failedCodes;
+    const fallbackParts = [];
+    if (cached.length) fallbackParts.push(cached.length + ' 檔沿用舊報價');
+    if (unavailable) fallbackParts.push(unavailable + ' 檔無可用報價');
+    document.getElementById('header-sub').textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + fallbackParts.join(' ・ ');
   }
   renderPortfolio();
 }
@@ -2049,6 +2178,32 @@ function fmtAt(iso){ if(!iso)return''; var d=new Date(iso); return d.toLocaleStr
 function normDate(d){ return d?String(d).replace(/\//g,'-'):'' ; }
 function roundShares(n){ return Math.round((+n||0)*1e6)/1e6; }
 
+function quoteMeta(sid) {
+  var cache = priceCache[sid];
+  var status = priceFetchStatus[sid];
+  if (!cache || !cache.price) return {text:'本次未取得報價', cls:'quote-cache'};
+  var stock = stocks.find(function(st){ return st.id===sid; });
+  if (stock && stock.market==='基金') {
+    return {text:'手動淨值'+(cache.at?' ・ '+fmtAt(cache.at):''), cls:''};
+  }
+  var parts = [];
+  if (status && status.fresh) {
+    parts.push('本次已更新');
+    parts.push(status.source || cache.source || '即時報價');
+  } else {
+    parts.push('使用快取');
+    if (cache.source && cache.source!=='cache' && cache.source!=='manual') parts.push('前次 '+cache.source);
+  }
+  parts.push('昨收 '+(cache.prevClose > 0 ? fn(cache.prevClose,2) : '—'));
+  if (cache.at) parts.push(fmtAt(cache.at));
+  return {text:parts.join(' ・ '), cls:(status && status.fresh)?'quote-fresh':'quote-cache'};
+}
+
+function quoteMetaHtml(sid) {
+  var meta = quoteMeta(sid);
+  return '<div class="price-time '+meta.cls+'">'+meta.text+'</div>';
+}
+
 // ── Portfolio ──────────────────────────────────────────────
 function getPrice(sid){ return priceCache[sid]?.price || 0; }
 
@@ -2328,6 +2483,10 @@ function renderPortfolio() {
           })() :
           // ── 股票/ETF 卡片 ──
           (s.cur<=0 ?
+            '<div class="price-row">' +
+              '<div class="price-label">現價'+(isUS?' <span style="font-size:10px;color:var(--gold)">USD</span>':'')+'</div>' +
+              '<div><div class="price-auto '+(hp?'':'muted')+'">'+(hp?fn(pr,2):'—')+'</div>'+quoteMetaHtml(st.id)+'</div>' +
+            '</div>' +
             '<div class="stats-row">' +
               '<div class="stat-box '+pbg(s.real)+'"><div class="stat-label">已實現損益'+currBadge+'</div><div class="stat-value '+pcls(s.real)+'">'+ps(s.real)+fc(s.real)+'</div><div class="stat-sub '+pcls(s.realPct)+'">'+fp(s.realPct)+'</div></div>' +
               '<div class="stat-box bg-green"><div class="stat-label">累計股息'+currBadge+'</div><div class="stat-value green">'+fc(s.div)+'</div></div>' +
@@ -2337,7 +2496,7 @@ function renderPortfolio() {
               '<div class="price-label">現價'+(isUS?' <span style="font-size:10px;color:var(--gold)">USD</span>':'')+'</div>' +
               '<div>' +
                 '<div class="price-auto '+(hp?pcls(s.unreal):'muted')+'">'+(hp?fn(pr,2):'抓取中…')+'</div>' +
-                '<div class="price-time">'+(cache?fmtAt(cache.at):'')+'</div>' +
+                quoteMetaHtml(st.id) +
               '</div>' +
             '</div>' +
             '<div class="stats-row">' +
@@ -2448,8 +2607,9 @@ function updateDetailHeaderPrice(sid) {
   if (pr > 0) {
     priceEl.textContent = (isFund ? '淨值 ' : '') + fn(pr, 2) + (isUS ? ' USD' : '');
     priceEl.style.color = isFund ? 'var(--text)' : (s.unreal >= 0 ? 'var(--green)' : 'var(--red)');
-    var cache = priceCache[sid];
-    timeEl.textContent = cache ? fmtAt(cache.at) : '';
+    var meta = quoteMeta(sid);
+    timeEl.textContent = meta.text;
+    timeEl.style.color = meta.cls==='quote-fresh' ? 'var(--green)' : 'var(--gold)';
   } else {
     priceEl.textContent = isFund ? '未輸入淨值' : '—';
     priceEl.style.color = 'var(--text2)';
@@ -3927,7 +4087,7 @@ auth.onAuthStateChanged(async function(user) {
       fetchAllPrices();
     }
   } else {
-    uid=null; stocks=[]; txns={}; priceCache={};
+    uid=null; stocks=[]; txns={}; priceCache={}; priceFetchStatus={};
     clearLocalCache();
     hideLoadingBar();
     document.getElementById('login-screen').style.display='flex';
@@ -4159,7 +4319,7 @@ function renderWatchlistTable() {
   var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:fmtPct(totalDayPct),unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct),nextDiv:''};
   var cellFn = {
     shares:function(r){return fn(r.s.cur);},
-    price: function(r){return '$'+fn(r.pr,2);},
+    price: function(r){return '$'+fn(r.pr,2)+quoteMetaHtml(r.st.id);},
     cost:  function(r){return '$'+fn(Math.round(toTWDChart(r.s.cost, r.st)));},
     mv:    function(r){return '$'+fn(Math.round(toTWDChart(r.s.mv, r.st)));},
     dayPnl:function(r){return fmtPnl(r.dayPnl);},
