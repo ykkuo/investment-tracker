@@ -327,7 +327,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -2171,7 +2171,7 @@ function calc(sid, price) {
 
 // ── Format ─────────────────────────────────────────────────
 function fn(n,d){ if(n===null||n===undefined||isNaN(n))return'—'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
-function formatShares(n){ if(n===null||n===undefined||isNaN(n))return'—'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:4}); }
+function formatShares(n){ if(n===null||n===undefined||isNaN(n))return'—'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2}); }
 function fc(n){ return (n<0?'-':'')+'$'+fn(Math.abs(n)); }
 function fp(n){ return (n>=0?'+':'')+(n*100).toFixed(2)+'%'; }
 function fd(s){ return s?s.replace(/-/g,'/'):'—'; }
