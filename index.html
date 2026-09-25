@@ -251,8 +251,6 @@ textarea.input{height:72px;resize:none}
 .code-badge { background:rgba(255,255,255,0.06); border:1px solid var(--border,#2a3d55); border-radius:4px; padding:2px 7px; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; }
 .wl-toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border,#2a3d55); flex-wrap:wrap; background:#131c2e; }
 .wl-toolbar-label { font-size:0.78rem; color:var(--mute,#8899aa); white-space:nowrap; }
-.wl-filter-input { width:180px; height:32px; padding:0 10px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; outline:none; }
-.wl-filter-input:focus { border-color:var(--accent); }
 .wl-col-picker { display:flex; flex-wrap:wrap; gap:6px; }
 .wl-height-tools { margin-left:auto; display:flex; align-items:center; gap:6px; }
 .wl-height-input { width:48px; height:32px; background:var(--bg3); border:1px solid var(--border,#2a3d55); border-radius:8px; color:var(--text); font-size:13px; text-align:center; font-family:inherit; }
@@ -283,7 +281,6 @@ textarea.input{height:72px;resize:none}
   .wl-table thead th, .wl-table td { padding:8px 8px; font-size:0.78rem; }
   .wl-col-name { left:64px; min-width:80px; }
   .wl-col-code { min-width:64px; }
-  .wl-filter-input { flex:1; min-width:120px; width:auto; }
   .wl-height-tools { width:100%; margin-left:0; justify-content:flex-end; }
 }
 </style>
@@ -330,7 +327,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b4</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b5</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -427,7 +424,7 @@ textarea.input{height:72px;resize:none}
 </div>
 
 <!-- Watchlist Tab -->
-<div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">篩選</span><input id="wl-filter-input" class="wl-filter-input" type="search" placeholder="代號或名稱"><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div><div class="wl-height-tools"><span class="wl-toolbar-label">表格大小</span><button type="button" id="btn-rows-dec" class="wl-rows-btn">−</button><input id="wl-visible-rows" class="wl-height-input" type="number" min="3" max="30" step="1" inputmode="numeric"><button type="button" id="btn-rows-inc" class="wl-rows-btn">+</button></div></div><div id="wl-table-wrap"></div></div>
+<div class="tab-content" id="tab-watchlist" style="padding:0"><div class="wl-toolbar"><span class="wl-toolbar-label">篩選</span><div class="chart-stock-picker" id="wl-filter-picker"><button class="chart-picker-btn" id="wl-filter-toggle">標的 <span id="wl-filter-count">全部</span> ▾</button><div class="chart-picker-panel" id="wl-filter-panel"><div class="chart-picker-actions"><button id="wl-filter-all">全選</button><button id="wl-filter-none">清除</button></div><div class="chart-picker-list" id="wl-filter-list"></div></div></div><span class="wl-toolbar-label">顯示欄位</span><div id="wl-col-picker" class="wl-col-picker"></div><div class="wl-height-tools"><span class="wl-toolbar-label">表格大小</span><button type="button" id="btn-rows-dec" class="wl-rows-btn">−</button><input id="wl-visible-rows" class="wl-height-input" type="number" min="3" max="30" step="1" inputmode="numeric"><button type="button" id="btn-rows-inc" class="wl-rows-btn">+</button></div></div><div id="wl-table-wrap"></div></div>
 
 <!-- Help Tab -->
 <div class="tab-content" id="tab-help">
@@ -820,7 +817,7 @@ var pfPickerOpen = false;
 var wlCols = {shares:true, price:true, cost:true, mv:true, dayPnl:true, dayPct:true, unreal:true, unrPct:true, nextDiv:true};
 var wlSortBy = localStorage.getItem('wl_sortBy') || 'code';
 var wlSortDir = localStorage.getItem('wl_sortDir') || 'asc';
-var wlFilterText = '';
+var wlSelectedIds = null; // null = all selected
 var WL_COL_DEFS = [
   {key:'shares', label:'股數'},
   {key:'price',  label:'現價'},
@@ -4274,16 +4271,15 @@ function renderWatchlistTable() {
   var _prevScrollEl = wrap.querySelector('.wl-scroll-wrap');
   var _scrollLeft = _prevScrollEl ? _prevScrollEl.scrollLeft : 0;
   var _scrollTop = _prevScrollEl ? _prevScrollEl.scrollTop : 0;
-  var filterText = wlFilterText.trim().toLocaleLowerCase('zh-TW');
   var holding = stocks.filter(function(st){
     if (calc(st.id, getPrice(st.id)).cur <= 0) return false;
     if (showMarket !== 'all' && st.market !== showMarket) return false;
-    if (filterText && !((st.code||'')+' '+(st.name||'')).toLocaleLowerCase('zh-TW').includes(filterText)) return false;
+    if (wlSelectedIds !== null && wlSelectedIds.indexOf(st.id) === -1) return false;
     return true;
   });
   if (holding.length === 0) {
     var mktLabel = showMarket==='all' ? '' : '（'+showMarket+'）';
-    var emptyMsg = filterText ? '沒有符合「'+wlFilterText.trim()+'」的持倉' : '尚無持倉'+mktLabel;
+    var emptyMsg = wlSelectedIds!==null ? '沒有選取任何符合條件的持倉' : '尚無持倉'+mktLabel;
     wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">'+emptyMsg+'</div></div>';
     return;
   }
@@ -4384,13 +4380,48 @@ function renderWatchlistTable() {
   });
 }
 
+function buildWlFilterPicker() {
+  var baseStocks = stocks.filter(function(st){ return calc(st.id, getPrice(st.id)).cur > 0; });
+  var list = document.getElementById('wl-filter-list');
+  var countEl = document.getElementById('wl-filter-count');
+  var toggle = document.getElementById('wl-filter-toggle');
+  if (!list || !countEl || !toggle) return;
+  list.innerHTML = '';
+  baseStocks.forEach(function(st){
+    var checked = wlSelectedIds===null || wlSelectedIds.indexOf(st.id)!==-1;
+    var item = document.createElement('label');
+    item.className = 'chart-picker-item';
+    item.innerHTML = '<input type="checkbox" value="'+st.id+'"'+(checked?' checked':'')+'>'+st.name+'<span style="color:var(--text2);font-size:11px;margin-left:auto">'+st.code+'</span>';
+    item.querySelector('input').addEventListener('change', function(){
+      var inputs = document.querySelectorAll('#wl-filter-list input');
+      var selected = Array.prototype.filter.call(inputs, function(i){return i.checked;}).map(function(i){return i.value;});
+      wlSelectedIds = selected.length===baseStocks.length ? null : selected;
+      countEl.textContent = wlSelectedIds===null ? '全部' : selected.length+'/'+baseStocks.length;
+      toggle.classList.toggle('active', wlSelectedIds!==null);
+      renderWatchlistTable();
+    });
+    list.appendChild(item);
+  });
+  var selectedCount = wlSelectedIds===null ? baseStocks.length : baseStocks.filter(function(st){return wlSelectedIds.indexOf(st.id)!==-1;}).length;
+  countEl.textContent = wlSelectedIds===null ? '全部' : selectedCount+'/'+baseStocks.length;
+  toggle.classList.toggle('active', wlSelectedIds!==null);
+  if (!toggle.dataset.bound) {
+    toggle.dataset.bound='1';
+    toggle.addEventListener('click', function(e){ e.stopPropagation(); document.getElementById('wl-filter-panel').classList.toggle('open'); });
+    document.getElementById('wl-filter-all').addEventListener('click', function(){ wlSelectedIds=null; buildWlFilterPicker(); renderWatchlistTable(); });
+    document.getElementById('wl-filter-none').addEventListener('click', function(){ wlSelectedIds=[]; buildWlFilterPicker(); renderWatchlistTable(); });
+  }
+}
+
+document.addEventListener('click', function(e){
+  var panel=document.getElementById('wl-filter-panel');
+  var picker=document.getElementById('wl-filter-picker');
+  if(panel && picker && !picker.contains(e.target)) panel.classList.remove('open');
+});
+
 async function renderWatchlist() {
   buildWlColPicker();
-  var filterInp=document.getElementById('wl-filter-input');
-  if(filterInp && !filterInp.dataset.bound){
-    filterInp.dataset.bound='1';
-    filterInp.addEventListener('input', function(){ wlFilterText=this.value; renderWatchlistTable(); });
-  }
+  buildWlFilterPicker();
   applyWlTableHeight();
   renderWatchlistTable();
   if (!divCalCache) {
