@@ -327,7 +327,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b5</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b6</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -4233,6 +4233,7 @@ document.querySelectorAll('.mf-btn').forEach(function(btn){
     var mkt = this.dataset.market;
     showMarket = mkt;
     curChartMarket = mkt;
+    wlSelectedIds = null;
     document.querySelectorAll('.mf-btn').forEach(function(b){ b.classList.remove('active'); });
     document.querySelectorAll('.mf-btn[data-market="'+mkt+'"]').forEach(function(b){ b.classList.add('active'); });
     // Re-render whichever tab is active
@@ -4381,7 +4382,11 @@ function renderWatchlistTable() {
 }
 
 function buildWlFilterPicker() {
-  var baseStocks = stocks.filter(function(st){ return calc(st.id, getPrice(st.id)).cur > 0; });
+  var baseStocks = stocks.filter(function(st){
+    if (calc(st.id, getPrice(st.id)).cur <= 0) return false;
+    if (showMarket !== 'all' && st.market !== showMarket) return false;
+    return true;
+  });
   var list = document.getElementById('wl-filter-list');
   var countEl = document.getElementById('wl-filter-count');
   var toggle = document.getElementById('wl-filter-toggle');
