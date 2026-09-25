@@ -2171,6 +2171,7 @@ function calc(sid, price) {
 
 // ── Format ─────────────────────────────────────────────────
 function fn(n,d){ if(n===null||n===undefined||isNaN(n))return'—'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
+function formatShares(n){ if(n===null||n===undefined||isNaN(n))return'—'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:4}); }
 function fc(n){ return (n<0?'-':'')+'$'+fn(Math.abs(n)); }
 function fp(n){ return (n>=0?'+':'')+(n*100).toFixed(2)+'%'; }
 function fd(s){ return s?s.replace(/-/g,'/'):'—'; }
@@ -2510,7 +2511,7 @@ function renderPortfolio() {
               '</div>' +
             '</div>' +
             '<div class="stats-row">' +
-              '<div class="stat-box"><div class="stat-label">持股</div><div class="stat-value">'+fn(s.cur)+'</div><div class="stat-sub muted">股</div></div>' +
+              '<div class="stat-box"><div class="stat-label">持股</div><div class="stat-value">'+formatShares(s.cur)+'</div><div class="stat-sub muted">股</div></div>' +
               '<div class="stat-box"><div class="stat-label">平均成本'+currBadge+'</div><div class="stat-value">$'+fn(s.avg,2)+'</div></div>' +
               '<div class="stat-box '+(hp?pbg(s.unreal):'')+'">' +
                 '<div class="stat-label">未實現損益'+currBadge+'</div>' +
@@ -2673,7 +2674,7 @@ function renderDetail() {
     // ── 股票/ETF info card ──
     html +=
       (isUS ? '<div style="background:rgba(240,180,41,0.1);border:1px solid rgba(240,180,41,0.25);border-radius:8px;padding:7px 10px;font-size:11px;color:var(--gold);margin-bottom:10px">💵 美股：所有金額以 USD 原幣顯示</div>' : '') +
-      '<div class="info-row"><span class="info-label">持有股數</span><span class="info-value">'+fn(s.cur)+' 股</span></div>' +
+      '<div class="info-row"><span class="info-label">持有股數</span><span class="info-value">'+formatShares(s.cur)+' 股</span></div>' +
       '<div class="info-row"><span class="info-label">平均成本'+currLabel+'</span><span class="info-value">$'+fn(s.avg,2)+'</span></div>' +
       '<div class="info-row"><span class="info-label">目前持倉成本'+currLabel+'</span><span class="info-value">'+fc(s.cost)+'</span></div>' +
       (pr>0?
@@ -2717,7 +2718,7 @@ function renderDetail() {
         var sellPnL=null;
         if (tx.type==='賣出'&&tx.shares) { var _txAvg=(avgAtSell[String(tx.id)]!==undefined?avgAtSell[String(tx.id)]:s.avg); var c=+(tx.shares)*_txAvg,pnl=+(tx.total)-c; sellPnL={c:c,pnl:pnl,pct:c>0?pnl/c:0}; }
         html+='<div class="tx-details">' +
-          '<div><div class="tx-detail-label">股數</div><div class="tx-detail-value">'+fn(tx.shares)+'</div></div>' +
+          '<div><div class="tx-detail-label">股數</div><div class="tx-detail-value">'+formatShares(tx.shares)+'</div></div>' +
           '<div><div class="tx-detail-label">單價</div><div class="tx-detail-value">$'+fn(tx.price,2)+'</div></div>' +
           '<div><div class="tx-detail-label">'+(tx.type==='賣出'?'實收金額':'總成本')+'</div><div class="tx-detail-value">'+fc(tx.total)+'</div></div>' +
         '</div>' +
@@ -3519,7 +3520,7 @@ function showImportPreview(rows) {
       '<td>'+(r.market||'')+'</td>' +
       '<td>'+(r.currency||'')+'</td>' +
       '<td>'+r.type+'</td>' +
-      '<td>'+(r.shares!=null?r.shares:'')+'</td>' +
+      '<td>'+(r.shares!=null?formatShares(r.shares):'')+'</td>' +
       '<td>'+(r.price!=null?r.price:'')+'</td>' +
       '<td>'+(r.fee!=null&&r.fee!==0?r.fee:'')+'</td>' +
       '<td>'+(r.tax!=null&&r.tax!==0?r.tax:'')+'</td>' +
@@ -4328,7 +4329,7 @@ function renderWatchlistTable() {
   var active = WL_COL_DEFS.filter(function(c){ return wlCols[c.key]; });
   var totals = {shares:'',price:'',cost:'$'+fn(Math.round(totalCost)),mv:'$'+fn(Math.round(totalMv)),dayPnl:fmtPnl(totalDayPnl),dayPct:fmtPct(totalDayPct),unreal:fmtPnl(totalUnreal),unrPct:fmtPct(totalUnrPct),nextDiv:''};
   var cellFn = {
-    shares:function(r){return fn(r.s.cur);},
+    shares:function(r){return formatShares(r.s.cur);},
     price: function(r){return '$'+fn(r.pr,2)+quoteBadgeHtml(r.st.id);},
     cost:  function(r){return '$'+fn(Math.round(toTWDChart(r.s.cost, r.st)));},
     mv:    function(r){return '$'+fn(Math.round(toTWDChart(r.s.mv, r.st)));},
@@ -4472,7 +4473,7 @@ function _renderWatchlistOLD() {
   var totalUnrPct = totalCost > 0 ? totalUnreal / totalCost : null;
 
   var colData = {
-    shares: { td: function(r){ return fn(r.s.cur); }, total: '' },
+    shares: { td: function(r){ return formatShares(r.s.cur); }, total: '' },
     price:  { td: function(r){ return '$'+fn(r.pr,2); }, total: '' },
     cost:   { td: function(r){ return '$'+fn(Math.round(r.s.cost)); }, total: '$'+fn(Math.round(totalCost)) },
     mv:     { td: function(r){ return '$'+fn(Math.round(r.s.mv)); }, total: '$'+fn(Math.round(totalMv)) },
@@ -4565,7 +4566,7 @@ function openLotPicker() {
   var lots = getAvailableLots(curStockId);
   if (!lots.length) { alert('目前沒有可用的買入批次'); return; }
   pendingLots = lots.map(function(l){ return { buyTxId:l.id, date:l.date, price:l.price, available:l.remaining, shares:0 }; });
-  document.getElementById('lot-need-shares').textContent = needShares + ' 股';
+  document.getElementById('lot-need-shares').textContent = formatShares(needShares) + ' 股';
   renderLotPicker(needShares);
   document.getElementById('m-lot-picker').classList.add('open');
 }
@@ -4576,7 +4577,7 @@ function renderLotPicker(needShares) {
     return '<div style="background:var(--bg3);border-radius:10px;padding:10px 12px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
         '<span style="font-size:13px;font-weight:700">' + l.date + '</span>' +
-        '<span style="font-size:12px;color:var(--text2)">@$' + fn(l.price,2) + '　可用 <b>' + fn(l.available) + '</b> 股</span>' +
+        '<span style="font-size:12px;color:var(--text2)">@$' + fn(l.price,2) + '　可用 <b>' + formatShares(l.available) + '</b> 股</span>' +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:10px">' +
         '<span style="font-size:12px;color:var(--text3);flex:1">賣出股數</span>' +
@@ -4604,7 +4605,7 @@ function updateLotSummary(needShares) {
   var totalCost  = pendingLots.reduce(function(s,l){ return s + (l.shares||0)*l.price; }, 0);
   var weighted   = totalAlloc > 0 ? totalCost / totalAlloc : 0;
 
-  document.getElementById('lot-alloc-shares').textContent = fn(totalAlloc) + ' 股';
+  document.getElementById('lot-alloc-shares').textContent = formatShares(totalAlloc) + ' 股';
   document.getElementById('lot-weighted-cost').textContent = totalAlloc > 0 ? '$' + fn(weighted, 2) + ' / 股' : '—';
 
   var diff = Math.round((totalAlloc - needShares) * 10000) / 10000;
