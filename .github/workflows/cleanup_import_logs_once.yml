@@ -1,0 +1,27 @@
+name: 一次性清除匯入執行紀錄
+
+# 一次性工具：刪除「新光證券每日自動匯入」過去所有執行紀錄（含 log 與 artifact）
+# 原因：repo 為公開，舊 log 內含交易明細。執行完畢後即可刪除本檔。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 刪除 daily_import.yml 的所有執行紀錄
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api --paginate "repos/$REPO/actions/workflows/daily_import.yml/runs?per_page=100" --jq '.workflow_runs[].id')
+          count=0
+          for id in $ids; do
+            gh api -X DELETE "repos/$REPO/actions/runs/$id" && count=$((count+1))
+          done
+          echo "已刪除 $count 筆執行紀錄"
