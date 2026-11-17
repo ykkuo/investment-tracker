@@ -3,7 +3,7 @@ import re
 import base64
 import pdfplumber
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -56,6 +56,19 @@ def get_parts(payload):
         parts.append(payload)
     return parts
 
+TW_TZ = timezone(timedelta(hours=8))
+
+def email_date_of(msg):
+    """信件收到的日期（台灣時間）；Gmail 的 internalDate 是毫秒 epoch"""
+    try:
+        return datetime.fromtimestamp(int(msg['internalDate']) / 1000, tz=TW_TZ)
+    except (KeyError, ValueError, TypeError):
+        return datetime.now(TW_TZ)
+
+def resolve_year(mm, email_date):
+    """交易日只有 MM/DD，用收信日期推年份：交易月份比收信月份大，代表是去年（例：1 月收到 12 月的交易）"""
+    return email_date.year - 1 if int(mm) > email_date.month else email_date.year
+
 # ── 從 Gmail 下載 PDF 附件 ─────────────────────────
 def download_skis_pdfs(service):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -63,12 +76,13 @@ def download_skis_pdfs(service):
         userId='me', q=SEARCH_QUERY, maxResults=20
     ).execute()
     messages = results.get('messages', [])
-    downloaded = []
+    downloaded = []   # [(檔案路徑, 收信日期, 信件 ID)]
 
     for msg_meta in messages:
         msg = service.users().messages().get(
             userId='me', id=msg_meta['id'], format='full'
         ).execute()
+        email_date = email_date_of(msg)
         for part in get_parts(msg['payload']):
             filename = part.get('filename', '')
             if not filename.lower().endswith('.pdf'):
@@ -80,20 +94,21 @@ def download_skis_pdfs(service):
                 userId='me', messageId=msg_meta['id'], id=att_id
             ).execute()
             data = base64.urlsafe_b64decode(att['data'])
-            save_path = os.path.join(DOWNLOAD_DIR, filename)
+            # 檔名加上信件 ID：不同信件的附件同名時才不會互相覆蓋、被重複解析
+            save_path = os.path.join(DOWNLOAD_DIR, f"{msg_meta['id']}_{filename}")
             with open(save_path, 'wb') as f:
                 f.write(data)
-            detail(f'✅ 下載：{filename}')
-            downloaded.append(save_path)
+            detail(f'✅ 下載：{filename}（{email_date:%Y-%m-%d}）')
+            downloaded.append((save_path, email_date, msg_meta['id']))
 
     if not downloaded:
         print('📭 近期沒有新光帳務通知信（非交易日屬正常）')
     return downloaded
 
 # ── 解析 PDF → 回傳 records list ──────────────────
-def parse_skis_pdf(pdf_path, password=PDF_PASSWORD):
+def parse_skis_pdf(pdf_path, password=PDF_PASSWORD, email_date=None, source=''):
     records = []
-    year = None
+    year = None   # 沒有收信日期時（手動測試）才用 PDF 裡的「XXXX年」或今年
 
     RE_NORMAL = re.compile(
         r'^(\d{2}/\d{2})\s+'
@@ -138,6 +153,8 @@ def parse_skis_pdf(pdf_path, password=PDF_PASSWORD):
                     net      = m.group(9)
 
                     mm, dd = date_raw.split('/')
+                    if email_date is not None:
+                        yr = resolve_year(mm, email_date)
                     date_str = f"{yr}-{mm}-{dd}"
                     trade_type = '買入' if '買' in side_raw else '賣出'
 
@@ -169,7 +186,8 @@ def parse_skis_pdf(pdf_path, password=PDF_PASSWORD):
                         '交易稅':         real_tax,
                         '賣出成本(每股)': '',
                         '總金額':         real_net,
-                        '備註':           remark
+                        '備註':           remark,
+                        '_來源':          source,   # 信件 ID，供重複判斷用（不寫入 Firebase / CSV）
                     })
                     label = '定期定額' if is_periodic else side_raw
                     detail(f'  ✅ {date_str} {symbol} {name} {label} {qty}股 @{price} 金額={real_net}')
@@ -220,20 +238,30 @@ def count_existing(uid, stock_id, date, tx_type, shares, price):
             count += 1
     return count
 
+def trade_key(r):
+    return (r['標的代號'], r['日期'], r['類型'], r['股數'], r['單價'])
+
+def expected_counts(records):
+    """每種交易「應該」有幾筆。
+    同一封信裡出現 2 筆一模一樣的交易 → 真的是 2 筆；
+    同一筆交易出現在不同信件（例如補寄、3 天搜尋範圍重疊）→ 只算 1 次。
+    所以取「各封信中出現次數的最大值」，而不是全部加總。"""
+    per_source = {}
+    for r in records:
+        k = trade_key(r)
+        src = r.get('_來源', '')
+        per_source.setdefault(k, {})
+        per_source[k][src] = per_source[k].get(src, 0) + 1
+    return {k: max(v.values()) for k, v in per_source.items()}
+
 def import_to_firebase(uid, records, auto_run=False):
     from firebase_admin import firestore
     db = get_db()
     imported = skipped = 0
 
-    # 統計本批次每個 key 出現幾次，用來處理同批次內的重複
-    # key = (code, date, type, shares, price)
-    batch_counts = {}
-    for r in records:
-        key = (r['標的代號'], r['日期'], r['類型'], r['股數'], r['單價'])
-        batch_counts[key] = batch_counts.get(key, 0) + 1
-
-    # 記錄本批次已處理幾筆（用來搭配 count_existing 判斷）
-    batch_done = {}
+    target   = expected_counts(records)   # 每種交易應有幾筆
+    existing = {}                          # 每種交易在寫入前，Firebase 已有幾筆
+    written  = {}                          # 本次已寫入幾筆
 
     for r in records:
         code    = r['標的代號']
@@ -244,25 +272,23 @@ def import_to_firebase(uid, records, auto_run=False):
         price   = r['單價']
         sid, _  = find_or_create_stock(uid, code, name)
 
-        key = (code, date, tx_type, shares, price)
-        batch_done[key] = batch_done.get(key, 0)
+        key = trade_key(r)
+        if key not in existing:
+            existing[key] = count_existing(uid, sid, date, tx_type, shares, price)
+            written[key]  = 0
 
-        # Firebase 已有幾筆 + 本批次已寫幾筆 >= 本批次總共幾筆 → 跳過
-        already_in_db = count_existing(uid, sid, date, tx_type, shares, price)
-        # db 已有的數量 > 本批次目前這是第幾筆 → 可能重複
-        if already_in_db > batch_done[key]:
+        # Firebase 已有 + 本次已寫 >= 應有筆數 → 這筆是重複
+        if existing[key] + written[key] >= target[key]:
             detail(f'    ⚠️  疑似重複：{date} {code} {tx_type} {shares}股 @{price}')
-            detail(f'       Firebase 已有 {already_in_db} 筆相同條件的交易')
+            detail(f'       Firebase 已有 {existing[key]} 筆相同條件的交易')
             if auto_run:
                 detail(f'       ⏩ 自動模式：跳過')
                 skipped += 1
-                batch_done[key] += 1
                 continue
             ans = input('       仍要匯入這筆嗎？[y/N] ').strip().lower()
             if ans != 'y':
                 print(f'       ⏩ 跳過')
                 skipped += 1
-                batch_done[key] += 1
                 continue
             print(f'       ✅ 強制匯入')
 
@@ -281,7 +307,7 @@ def import_to_firebase(uid, records, auto_run=False):
         })
         detail(f'    🔥 寫入 Firebase：{date} {code} {name} {tx_type} {shares}股 @{price}')
         imported += 1
-        batch_done[key] += 1
+        written[key] += 1
 
     return imported, skipped
 
@@ -304,9 +330,9 @@ def main():
     all_records = []
     empty_pdfs = 0
 
-    for pdf_path in pdfs:
+    for pdf_path, email_date, msg_id in pdfs:
         detail(f'\n📄 解析：{pdf_path}')
-        records = parse_skis_pdf(pdf_path)
+        records = parse_skis_pdf(pdf_path, email_date=email_date, source=msg_id)
 
         if not records:
             detail('  ⚠️ 沒有找到交易明細，請確認 PDF 密碼或格式')

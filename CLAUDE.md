@@ -44,6 +44,9 @@
 - 套件清單以 `auto-import/requirements.txt` 為準，workflow 直接 `pip install -r`
 - repo 是公開的：`--auto` 模式只印統計數字，不可印出逐筆交易；不上傳 artifact
 - 模式：`--dry-run` 只預覽、`--auto` 排程模式（疑似重複一律跳過）
+- 交易日只有 MM/DD，年份用「收信日期」推算（交易月份 > 收信月份 → 去年），不依賴 PDF 內的年份格式
+- 重複判斷：同一封信內相同交易算多筆；同一筆交易出現在不同信件只算一次（取各信件出現次數的最大值）
+- 下載的 PDF 檔名前面加信件 ID，避免不同信件附件同名互相覆蓋
 - 通知走 Telegram Bot；機密全在 GitHub Secrets，絕不寫進 repo
 - 規劃中：基富通、中租的基金 PDF 匯入（尚未實作，遇到密碼 PDF、USD 基金以台幣扣款等問題）
 
