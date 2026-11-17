@@ -40,7 +40,9 @@
 
 ## 自動匯入（auto-import/）
 - 實際運作的是 `skis_auto_import.py`（新光證券 PDF → Firebase），由 `.github/workflows/daily_import.yml` 平日台灣 16:30 跑
-- workflow 會用 regex 把 secrets 寫進 PDF_PASSWORD / FIREBASE_USER_UID；改這兩行格式時要同步檢查 workflow
+- PDF_PASSWORD / FIREBASE_UID 由 workflow 以環境變數帶入，腳本用 `os.environ` 讀取（不再用 regex 改寫原始碼）
+- 套件清單以 `auto-import/requirements.txt` 為準，workflow 直接 `pip install -r`
+- repo 是公開的：`--auto` 模式只印統計數字，不可印出逐筆交易；不上傳 artifact
 - 模式：`--dry-run` 只預覽、`--auto` 排程模式（疑似重複一律跳過）
 - 通知走 Telegram Bot；機密全在 GitHub Secrets，絕不寫進 repo
 - 規劃中：基富通、中租的基金 PDF 匯入（尚未實作，遇到密碼 PDF、USD 基金以台幣扣款等問題）

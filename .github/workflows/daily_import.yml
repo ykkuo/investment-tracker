@@ -22,37 +22,35 @@ jobs:
           python-version: '3.11'
 
       - name: 安裝套件
-        run: pip install pdfplumber pandas google-auth google-auth-oauthlib google-api-python-client firebase-admin
+        run: pip install -r requirements.txt
 
       - name: 還原機密檔案
+        env:
+          GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+          GMAIL_CREDENTIALS: ${{ secrets.GMAIL_CREDENTIALS }}
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
         run: |
-          echo "${{ secrets.GMAIL_TOKEN }}"       | base64 -d > token.json
-          echo "${{ secrets.GMAIL_CREDENTIALS }}" | base64 -d > credentials.json
-          echo "${{ secrets.FIREBASE_SA }}"        | base64 -d > firebase_service_account.json
-
-      - name: 寫入設定
-        run: |
-          python - << 'PYEOF'
-          import re
-          with open('skis_auto_import.py', 'r', encoding='utf-8') as f:
-              content = f.read()
-          content = re.sub(r"PDF_PASSWORD\s*=\s*'.*?'",
-                           f"PDF_PASSWORD = '${{ secrets.PDF_PASSWORD }}'", content)
-          content = re.sub(r"FIREBASE_USER_UID\s*=\s*'.*?'",
-                           f"FIREBASE_USER_UID = '${{ secrets.FIREBASE_UID }}'", content)
-          with open('skis_auto_import.py', 'w', encoding='utf-8') as f:
-              f.write(content)
-          PYEOF
+          printf '%s' "$GMAIL_TOKEN"       | base64 -d > token.json
+          printf '%s' "$GMAIL_CREDENTIALS" | base64 -d > credentials.json
+          printf '%s' "$FIREBASE_SA"       | base64 -d > firebase_service_account.json
 
       - name: 執行匯入
-        run: python skis_auto_import.py --auto 2>&1 | tee import_output.txt
+        env:
+          # 腳本用 os.environ 讀取，不再用 regex 改寫原始碼
+          PDF_PASSWORD: ${{ secrets.PDF_PASSWORD }}
+          FIREBASE_UID: ${{ secrets.FIREBASE_UID }}
+        run: |
+          set -o pipefail   # 讓 Python 失敗時整個步驟也失敗（否則 tee 會吃掉錯誤碼）
+          python skis_auto_import.py --auto 2>&1 | tee import_output.txt
 
       # 隱私：repo 是公開的，不再上傳 CSV / log artifact（公開 repo 的 artifact 任何登入者都能下載）
 
       - name: 通知成功
         if: success()
         run: |
-          RESULT=$(grep "完成！" import_output.txt || echo "執行完成")
+          # 統計、警告（⚠️）、無通知信（📭）都帶進 Telegram；多行以 %0A 換行
+          RESULT=$(grep -E "完成！|⚠️|📭" import_output.txt | sed ':a;N;$!ba;s/\n/%0A/g' || true)
+          RESULT=${RESULT:-執行完成}
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d text="✅ 新光證券自動匯入 $(date '+%Y-%m-%d')%0A${RESULT}"
