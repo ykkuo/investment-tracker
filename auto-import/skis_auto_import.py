@@ -21,6 +21,15 @@ PDF_PASSWORD = ''          # 有加密填密碼，已解密留空
 FIREBASE_USER_UID = ''     # 從瀏覽器 Console 執行 firebase.auth().currentUser.uid 取得
 SERVICE_ACCOUNT   = 'firebase_service_account.json'
 
+# ── 隱私：--auto（GitHub Actions）模式下不印逐筆交易明細 ──
+# repo 是公開的，Actions log 任何人都看得到，所以排程模式只輸出統計數字
+QUIET = False
+
+def detail(msg=''):
+    """逐筆明細輸出；QUIET 模式（--auto）時不印"""
+    if not QUIET:
+        print(msg)
+
 # ── Gmail 認證 ────────────────────────────────────
 def get_gmail_service():
     creds = None
@@ -73,7 +82,7 @@ def download_skis_pdfs(service):
             save_path = os.path.join(DOWNLOAD_DIR, filename)
             with open(save_path, 'wb') as f:
                 f.write(data)
-            print(f'✅ 下載：{filename}')
+            detail(f'✅ 下載：{filename}')
             downloaded.append(save_path)
 
     if not downloaded:
@@ -162,7 +171,7 @@ def parse_skis_pdf(pdf_path, password=PDF_PASSWORD):
                         '備註':           remark
                     })
                     label = '定期定額' if is_periodic else side_raw
-                    print(f'  ✅ {date_str} {symbol} {name} {label} {qty}股 @{price} 金額={real_net}')
+                    detail(f'  ✅ {date_str} {symbol} {name} {label} {qty}股 @{price} 金額={real_net}')
 
                 i += 1
 
@@ -193,7 +202,7 @@ def find_or_create_stock(uid, code, name):
         'code': code, 'name': name, 'market': '台股',
         'createdAt': firestore.SERVER_TIMESTAMP,
     })
-    print(f'    ✨ 新建標的：{code} {name}')
+    detail(f'    ✨ 新建標的：{code} {name}')
     return ref.id, True
 
 def count_existing(uid, stock_id, date, tx_type, shares, price):
@@ -245,10 +254,10 @@ def import_to_firebase(uid, records, auto_run=False):
 
         # db 已有的數量 > 本批次目前這是第幾筆 → 可能重複
         if already_in_db > batch_done[key]:
-            print(f'    ⚠️  疑似重複：{date} {code} {tx_type} {shares}股 @{price}')
-            print(f'       Firebase 已有 {already_in_db} 筆相同條件的交易')
+            detail(f'    ⚠️  疑似重複：{date} {code} {tx_type} {shares}股 @{price}')
+            detail(f'       Firebase 已有 {already_in_db} 筆相同條件的交易')
             if auto_run:
-                print(f'       ⏩ 自動模式：跳過')
+                detail(f'       ⏩ 自動模式：跳過')
                 skipped += 1
                 batch_done[key] += 1
                 continue
@@ -273,7 +282,7 @@ def import_to_firebase(uid, records, auto_run=False):
             'note':   r['備註'],
             'createdAt': firestore.SERVER_TIMESTAMP,
         })
-        print(f'    🔥 寫入 Firebase：{date} {code} {name} {tx_type} {shares}股 @{price}')
+        detail(f'    🔥 寫入 Firebase：{date} {code} {name} {tx_type} {shares}股 @{price}')
         imported += 1
         batch_done[key] += 1
 
@@ -282,8 +291,10 @@ def import_to_firebase(uid, records, auto_run=False):
 # ── 主程式 ────────────────────────────────────────
 def main():
     import sys
+    global QUIET
     dry_run  = '--dry-run' in sys.argv
     auto_run = '--auto'    in sys.argv  # 自動排程模式：疑似重複一律跳過，不詢問
+    QUIET    = auto_run                 # 排程模式不印逐筆明細（公開 log）
 
     if dry_run:
         print('=' * 55)
@@ -296,7 +307,7 @@ def main():
     all_records = []
 
     for pdf_path in pdfs:
-        print(f'\n📄 解析：{pdf_path}')
+        detail(f'\n📄 解析：{pdf_path}')
         records = parse_skis_pdf(pdf_path)
 
         if not records:
@@ -304,22 +315,24 @@ def main():
             continue
 
         all_records.extend(records)
-        print(f'  ✅ 本檔解析 {len(records)} 筆，累計 {len(all_records)} 筆')
+        detail(f'  ✅ 本檔解析 {len(records)} 筆，累計 {len(all_records)} 筆')
 
     if not all_records:
         print('\n⚠️ 全部 PDF 均無交易明細')
         return
 
+    print(f'\n📊 共下載 {len(pdfs)} 個 PDF，解析出 {len(all_records)} 筆交易')
+
     # ── 預覽表格 ──────────────────────────────────
-    print(f'\n{"─"*65}')
-    print(f'  {"日期":<12} {"代號":<6} {"名稱":<10} {"類型":<4} {"股數":>6} {"單價":>8} {"手續費":>6} {"總金額":>10}')
-    print(f'  {"─"*63}')
+    detail(f'\n{"─"*65}')
+    detail(f'  {"日期":<12} {"代號":<6} {"名稱":<10} {"類型":<4} {"股數":>6} {"單價":>8} {"手續費":>6} {"總金額":>10}')
+    detail(f'  {"─"*63}')
     for r in all_records:
-        print(f'  {r["日期"]:<12} {r["標的代號"]:<6} {r["標的名稱"]:<10} '
+        detail(f'  {r["日期"]:<12} {r["標的代號"]:<6} {r["標的名稱"]:<10} '
               f'{r["類型"]:<4} {r["股數"]:>6} {r["單價"]:>8.2f} '
               f'{r["手續費"]:>6} {r["總金額"]:>10.0f}')
-    print(f'{"─"*65}')
-    print(f'  共 {len(all_records)} 筆')
+    detail(f'{"─"*65}')
+    detail(f'  共 {len(all_records)} 筆')
 
     if dry_run:
         print('\n✅ 預覽完成，資料未寫入。')
@@ -336,7 +349,7 @@ def main():
     ])
     df.sort_values('日期', inplace=True)
     df.to_csv(out_csv, index=False, encoding='utf-8-sig')
-    print(f'\n📄 CSV 備份：{out_csv}')
+    detail(f'\n📄 CSV 備份：{out_csv}')
 
     # ── 寫入 Firebase ─────────────────────────────
     if not FIREBASE_USER_UID:
@@ -348,7 +361,7 @@ def main():
         print(f'\n⚠️  找不到 {SERVICE_ACCOUNT}，跳過 Firebase 匯入')
         return
 
-    print(f'\n🔥 寫入 Firebase（UID: {FIREBASE_USER_UID[:8]}…）')
+    detail(f'\n🔥 寫入 Firebase（UID: {FIREBASE_USER_UID[:8]}…）')
     imp, skip = import_to_firebase(FIREBASE_USER_UID, all_records, auto_run=auto_run)
     print(f'\n🎉 完成！匯入 {imp} 筆，跳過重複 {skip} 筆')
 
