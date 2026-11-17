@@ -15,10 +15,11 @@ DOWNLOAD_DIR = './skis_pdfs'
 OUTPUT_DIR   = './skis_csv'
 OUTPUT_FILE  = 'skis_all.csv'
 SEARCH_QUERY = 'subject:(證券帳務回報通知) has:attachment newer_than:3d'
-PDF_PASSWORD = ''          # 有加密填密碼，已解密留空
+# 機密從環境變數讀取（GitHub Actions 由 secrets 帶入）；本機執行可先 export 或直接改預設值
+PDF_PASSWORD = os.environ.get('PDF_PASSWORD', '')       # 有加密填密碼，已解密留空
 
 # ── Firebase 設定 ─────────────────────────────────
-FIREBASE_USER_UID = ''     # 從瀏覽器 Console 執行 firebase.auth().currentUser.uid 取得
+FIREBASE_USER_UID = os.environ.get('FIREBASE_UID', '')  # 從瀏覽器 Console 執行 firebase.auth().currentUser.uid 取得
 SERVICE_ACCOUNT   = 'firebase_service_account.json'
 
 # ── 隱私：--auto（GitHub Actions）模式下不印逐筆交易明細 ──
@@ -86,7 +87,7 @@ def download_skis_pdfs(service):
             downloaded.append(save_path)
 
     if not downloaded:
-        print('⚠️ 沒有找到任何 PDF 附件，請確認 SEARCH_QUERY 是否正確')
+        print('📭 近期沒有新光帳務通知信（非交易日屬正常）')
     return downloaded
 
 # ── 解析 PDF → 回傳 records list ──────────────────
@@ -248,10 +249,6 @@ def import_to_firebase(uid, records, auto_run=False):
 
         # Firebase 已有幾筆 + 本批次已寫幾筆 >= 本批次總共幾筆 → 跳過
         already_in_db = count_existing(uid, sid, date, tx_type, shares, price)
-        if already_in_db + batch_done[key] >= batch_counts[key] + already_in_db:
-            # 換個角度：若 db 已有 N 筆，本批次有 M 筆，只要再寫 M-N 筆
-            pass  # 由下方邏輯處理
-
         # db 已有的數量 > 本批次目前這是第幾筆 → 可能重複
         if already_in_db > batch_done[key]:
             detail(f'    ⚠️  疑似重複：{date} {code} {tx_type} {shares}股 @{price}')
@@ -305,20 +302,25 @@ def main():
     pdfs = download_skis_pdfs(service)
 
     all_records = []
+    empty_pdfs = 0
 
     for pdf_path in pdfs:
         detail(f'\n📄 解析：{pdf_path}')
         records = parse_skis_pdf(pdf_path)
 
         if not records:
-            print('  ⚠️ 沒有找到交易明細，請確認 PDF 密碼或格式')
+            detail('  ⚠️ 沒有找到交易明細，請確認 PDF 密碼或格式')
+            empty_pdfs += 1
             continue
 
         all_records.extend(records)
         detail(f'  ✅ 本檔解析 {len(records)} 筆，累計 {len(all_records)} 筆')
 
+    # 有 PDF 卻解析不到交易，通常代表新光改了 PDF 格式；這行會出現在 Telegram 通知裡
+    if empty_pdfs:
+        print(f'\n⚠️ 有 {empty_pdfs}/{len(pdfs)} 個 PDF 解析不到交易明細，可能是 PDF 格式改變，請手動確認')
+
     if not all_records:
-        print('\n⚠️ 全部 PDF 均無交易明細')
         return
 
     print(f'\n📊 共下載 {len(pdfs)} 個 PDF，解析出 {len(all_records)} 筆交易')
