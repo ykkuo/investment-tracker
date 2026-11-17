@@ -1,0 +1,51 @@
+# 投資損益追蹤 App
+
+## 專案概述
+- 個人投資追蹤工具，擁有者 YK，台灣、繁體中文，UI 文字一律繁中
+- 單一檔案前端：`index.html`（vanilla JS + Firebase compat SDK 10.7.1 + Chart.js 4.4.0）
+- 後端：Firebase Auth（Google 登入）+ Firestore，部署在 GitHub Pages
+- 追蹤台股、美股、基金；台幣/美金雙幣別
+- Firestore 結構：users/{uid}/stocks/{sid}、users/{uid}/stocks/{sid}/txns/{txid}
+- 交易類型：買入 / 賣出 / 股息 / 再投入；賣出可有 sellCost、sellLots（批次）
+
+## 絕對規則
+1. 保持單一 HTML 檔，不拆檔、不加 build 工具
+2. 用精準的小幅修改，不要整檔重寫
+3. 改之前先確認 `index.html` 內版本號（右上 header 的 vXXaX）是最新基底
+4. 不可破壞既有 Firestore 資料結構（向下相容）
+5. 任何會改寫歷史資料的功能（如拆股），要有確認提示並提醒先匯出備份
+
+## 版本號規則 v<N><字母><M>
+- 大功能：數字+1，字母重設 a，子號重設 1（例 v56a5 → v57a1）
+- 小功能：字母往後，子號重設 1（例 v56a5 → v56b1）
+- Bug 修正：子號+1（例 v56a5 → v56a6）
+- 不確定規模時自行判斷，並用一句話說明理由
+- 每次修改要同步更新畫面上的版本標籤
+
+## 每次交付要附 changelog
+版本號＋套用的規則、逐項 bullet、不相關的修正分開列、需要 YK 注意的事項標出；保持簡短。
+
+## 合作方式
+- 大功能或結構調整，先給 YK 看方案/文案，確認後再實作
+- 複雜解析任務，先問關鍵的結構問題再設計
+- 用繁體中文回覆
+
+## 已知的坑（務必遵守）
+- 浮點殘值：賣出後與全部交易跑完後，股數 |x|<1e-6 視為 0（`calc()` 與 `getAvailableLots()` 都要）
+- Yahoo Finance 歷史價格會對拆股做回溯調整，所以 app 內股數必須是拆股後基準；已有「拆股調整」功能，不要手動逐筆改
+- 報價走 CORS proxy（r.jina.ai → allorigins.win）不穩定，header-sub 會顯示更新成功/沿用舊價的數量；考慮加第三個備援
+- 已出清的標的要保留，歷史績效才完整
+- 基金沒有歷史淨值，淨值由使用者手動輸入；USD 基金用 st.currency==='USD' 判斷
+- 即時頁面用即時匯率，歷史圖表用當時歷史匯率，兩者合計不一致是正常的
+
+## 自動匯入（auto-import/）
+- 實際運作的是 `skis_auto_import.py`（新光證券 PDF → Firebase），由 `.github/workflows/daily_import.yml` 平日台灣 16:30 跑
+- workflow 會用 regex 把 secrets 寫進 PDF_PASSWORD / FIREBASE_USER_UID；改這兩行格式時要同步檢查 workflow
+- 模式：`--dry-run` 只預覽、`--auto` 排程模式（疑似重複一律跳過）
+- 通知走 Telegram Bot；機密全在 GitHub Secrets，絕不寫進 repo
+- 規劃中：基富通、中租的基金 PDF 匯入（尚未實作，遇到密碼 PDF、USD 基金以台幣扣款等問題）
+
+## 待辦
+- 擴充台股報價的備援 proxy
+- 基金自動匯入解析器
+- 支出追蹤 App（獨立專案，獨立 Firebase）

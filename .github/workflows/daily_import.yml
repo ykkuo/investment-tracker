@@ -47,15 +47,7 @@ jobs:
       - name: 執行匯入
         run: python skis_auto_import.py --auto 2>&1 | tee import_output.txt
 
-      - name: 上傳執行記錄
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: import-log-${{ github.run_id }}
-          path: |
-            auto-import/skis_csv/
-            auto-import/import_output.txt
-          retention-days: 30
+      # 隱私：repo 是公開的，不再上傳 CSV / log artifact（公開 repo 的 artifact 任何登入者都能下載）
 
       - name: 通知成功
         if: success()
