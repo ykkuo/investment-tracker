@@ -38,6 +38,8 @@
   - `fetchTextWithFallback` 有斷路器：429／逾時後該 proxy 60 秒內跳過；jina 的 5xx 是目標網站錯誤，不觸發
   - MIS 成交價 z 常是 "-"，用 `misRowPrice()` 依序退回 trade.z → pz → 買賣中間價 → 昨收
   - 淨值圖的歷史股價（`fetchHistPrices`）仍是逐檔並行，持股多時會撞到限制
+  - 只抓「持有中」標的的現價（`needsLiveQuote`），已出清的沿用舊報價
+  - 遇到 429 限流時，65 秒後自動重抓失敗的那幾檔（只重試一次），header-sub 會顯示「proxy 限流」
 - 已出清的標的要保留，歷史績效才完整
 - 基金沒有歷史淨值，淨值由使用者手動輸入；USD 基金用 st.currency==='USD' 判斷
 - 即時頁面用即時匯率，歷史圖表用當時歷史匯率，兩者合計不一致是正常的
