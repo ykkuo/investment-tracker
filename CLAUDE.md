@@ -33,7 +33,11 @@
 ## 已知的坑（務必遵守）
 - 浮點殘值：賣出後與全部交易跑完後，股數 |x|<1e-6 視為 0（`calc()` 與 `getAvailableLots()` 都要）
 - Yahoo Finance 歷史價格會對拆股做回溯調整，所以 app 內股數必須是拆股後基準；已有「拆股調整」功能，不要手動逐筆改
-- 報價走 CORS proxy（r.jina.ai → allorigins.win）不穩定，header-sub 會顯示更新成功/沿用舊價的數量；考慮加第三個備援
+- 報價走 CORS proxy。2026-11 實測：只有 r.jina.ai 可用且**每分鐘限 20 次**；allorigins、codetabs 掛掉（522），corsproxy.io 需 API key，cors.lol 限流
+  - 因此報價必須「批次」：台股 MIS 一次 40 檔、Yahoo spark 一次 20 檔（含 USDTWD=X），整體 2～4 個請求；不要改回逐檔並行
+  - `fetchTextWithFallback` 有斷路器：429／逾時後該 proxy 60 秒內跳過；jina 的 5xx 是目標網站錯誤，不觸發
+  - MIS 成交價 z 常是 "-"，用 `misRowPrice()` 依序退回 trade.z → pz → 買賣中間價 → 昨收
+  - 淨值圖的歷史股價（`fetchHistPrices`）仍是逐檔並行，持股多時會撞到限制
 - 已出清的標的要保留，歷史績效才完整
 - 基金沒有歷史淨值，淨值由使用者手動輸入；USD 基金用 st.currency==='USD' 判斷
 - 即時頁面用即時匯率，歷史圖表用當時歷史匯率，兩者合計不一致是正常的
@@ -51,6 +55,7 @@
 - 規劃中：基富通、中租的基金 PDF 匯入（尚未實作，遇到密碼 PDF、USD 基金以台幣扣款等問題）
 
 ## 待辦
-- 擴充台股報價的備援 proxy
+- 報價備援：目前沒有免費 proxy 可當第二備援；可考慮 GitHub Actions 定時寫入報價或自架 Cloudflare Worker
+- 淨值圖歷史股價改批次（避免撞 jina 每分鐘 20 次限制）
 - 基金自動匯入解析器
 - 支出追蹤 App（獨立專案，獨立 Firebase）

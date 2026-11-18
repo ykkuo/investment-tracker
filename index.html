@@ -327,7 +327,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56b6</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56c1</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -989,26 +989,36 @@ const PROXY = 'https://api.allorigins.win/raw?url=';
 const YF = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 const TWSE_MIS = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp';
 
+// 實測（2026-11）：r.jina.ai 可用但每分鐘限 20 次；allorigins 常掛（522）。
+// 所以報價一律「批次」查詢，整體只送 2～3 個請求，避免撞到限制。
 async function fetchTextWithFallback(targetUrl) {
   const sources = [
-    'https://r.jina.ai/http://' + targetUrl.replace(/^https?:\/\//, ''),
-    PROXY + encodeURIComponent(targetUrl)
+    // tripOn5xx：jina 回 5xx 多半是「目標網站」出錯（不是 jina 掛了），所以 jina 只在 429／逾時時跳過
+    { name:'jina',       url:'https://r.jina.ai/' + targetUrl,           tripOn5xx:false },
+    { name:'allorigins', url:PROXY + encodeURIComponent(targetUrl),      tripOn5xx:true }
   ];
-  for (const url of sources) {
+  for (const src of sources) {
+    if ((proxyDownUntil[src.name] || 0) > Date.now()) continue; // 剛被限流或掛掉：先跳過
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12000);
     try {
-      const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
-      if (!res.ok) continue;
+      const res = await fetch(src.url, { signal: ctrl.signal, cache: 'no-store' });
+      if (!res.ok) {
+        if (res.status === 429 || (src.tripOn5xx && res.status >= 500)) proxyDownUntil[src.name] = Date.now() + 60000;
+        continue;
+      }
       const text = await res.text();
       if (text && text.trim()) return text;
     } catch(e) {
+      proxyDownUntil[src.name] = Date.now() + 60000; // 逾時／連不上
     } finally {
       clearTimeout(timer);
     }
   }
   return null;
 }
+// 斷路器：proxy 被限流（429）、自己掛掉或逾時後，60 秒內不再嘗試，避免每個請求都白等 12 秒
+var proxyDownUntil = {};
 
 async function fetchJsonDocument(targetUrl) {
   const text = await fetchTextWithFallback(targetUrl);
@@ -1053,6 +1063,23 @@ function misQuoteAt(row) {
     if (!isNaN(d.getTime())) return d.toISOString();
   }
   return new Date().toISOString();
+}
+
+// MIS 的成交價 z 在兩筆成交之間、冷門股、開盤前常是 "-"；依序改用其他欄位，不要直接判定抓不到
+function misFirstLevel(s) { return parseQuoteNumber(String(s || '').split('_')[0]); }
+function misRowPrice(row) {
+  if (!row) return 0;
+  var z = parseQuoteNumber(row.z);                         // 最新成交價
+  if (z > 0) return z;
+  var tz = parseQuoteNumber(row.trade && row.trade.z);     // 最後一筆成交
+  if (tz > 0) return tz;
+  var pz = parseQuoteNumber(row.pz);                       // 前一筆成交價
+  if (pz > 0) return pz;
+  var bid = misFirstLevel(row.b), ask = misFirstLevel(row.a);
+  if (bid > 0 && ask > 0) return (bid + ask) / 2;          // 買賣中間價
+  if (bid > 0) return bid;
+  if (ask > 0) return ask;
+  return parseQuoteNumber(row.y);                          // 開盤前：昨收即為目前價格
 }
 
 async function fetchMisJson(targetUrl) {
@@ -1102,7 +1129,7 @@ async function fetchTwseMisPrices(twStocks) {
     const rowsByCode = {};
     json.msgArray.forEach(function(row){
       const code = String(row && row.c || '').trim();
-      const price = parseQuoteNumber(row && row.z);
+      const price = misRowPrice(row);
       if (code && price > 0 && !rowsByCode[code]) rowsByCode[code] = row;
     });
     const writes = [];
@@ -1111,7 +1138,7 @@ async function fetchTwseMisPrices(twStocks) {
       if (!row) return;
       updated.add(st.id);
       writes.push(storeFreshQuote(st, {
-        price: parseQuoteNumber(row.z),
+        price: misRowPrice(row),
         prevClose: parseQuoteNumber(row.y),
         at: misQuoteAt(row),
         source: 'TWSE MIS',
@@ -1123,14 +1150,124 @@ async function fetchTwseMisPrices(twStocks) {
   return updated;
 }
 
+// 依已知交易所決定 Yahoo 代碼順序：MIS 回報過是上櫃（otc）就先試 .TWO，省下猜錯的請求
+function yahooTickersFor(st) {
+  const code = String(st.code || '').trim();
+  if (st.market === '台股') {
+    const ex = priceCache[st.id] && priceCache[st.id].exchange;
+    return ex === 'otc' ? [code+'.TWO', code+'.TW'] : [code+'.TW', code+'.TWO'];
+  }
+  return [code.replace(/\./g, '-')]; // 美股：BRK.B → BRK-B（Yahoo 格式）
+}
+
+// Yahoo spark 批次報價：一個請求查最多 20 檔。回傳 {symbol: {price, prevClose, at}}
+const SPARK_CHUNK = 20;
+async function fetchYahooSparkQuotes(symbols) {
+  const out = {};
+  for (let i=0; i<symbols.length; i+=SPARK_CHUNK) {
+    const chunk = symbols.slice(i, i+SPARK_CHUNK);
+    const url = YF.replace('/chart/', '/spark') + '?symbols=' + chunk.map(encodeURIComponent).join(',') +
+      '&range=1d&interval=1d&_=' + Date.now();
+    let json = null;
+    try { json = await fetchJsonDocument(url); } catch(e) {}
+    if (!json) continue;
+    // 新格式：{ "AAPL": {close:[..], chartPreviousClose, timestamp:[..]} }
+    // 舊格式：{ spark: { result: [{ symbol, response:[{ meta, timestamp, indicators }] }] } }
+    let entries = [];
+    if (json.spark && Array.isArray(json.spark.result)) {
+      entries = json.spark.result.map(function(r){
+        const resp = r && r.response && r.response[0] || {};
+        const meta = resp.meta || {};
+        const closes = resp.indicators && resp.indicators.quote && resp.indicators.quote[0] && resp.indicators.quote[0].close || [];
+        return { symbol: r && r.symbol, close: closes, price: meta.regularMarketPrice,
+          prev: meta.previousClose || meta.chartPreviousClose, ts: meta.regularMarketTime };
+      });
+    } else {
+      entries = Object.keys(json).map(function(k){
+        const v = json[k] || {};
+        const ts = Array.isArray(v.timestamp) ? v.timestamp[v.timestamp.length-1] : null;
+        return { symbol: v.symbol || k, close: v.close || [], price: null,
+          prev: v.previousClose || v.chartPreviousClose, ts: ts };
+      });
+    }
+    entries.forEach(function(e){
+      if (!e.symbol) return;
+      let price = parseQuoteNumber(e.price);
+      if (!(price > 0) && Array.isArray(e.close)) {
+        for (let j=e.close.length-1; j>=0; j--) { const c = parseQuoteNumber(e.close[j]); if (c > 0) { price = c; break; } }
+      }
+      if (!(price > 0)) return;
+      const tsNum = Number(e.ts);
+      out[String(e.symbol).toUpperCase()] = {
+        price: price,
+        prevClose: parseQuoteNumber(e.prev),
+        at: tsNum > 0 ? new Date(tsNum*1000).toISOString() : new Date().toISOString()
+      };
+    });
+  }
+  return out;
+}
+
+// 批次更新多檔報價（台股含 .TW/.TWO 兩輪），回傳成功更新的 stock id 集合；可順便帶匯率
+async function fetchYahooBatchPrices(stockList, withFx) {
+  const updated = new Set();
+  let pending = stockList.slice();
+  const fxSymbol = 'USDTWD=X';
+  for (let round=0; round<2 && (pending.length || (withFx && round===0)); round++) {
+    const symByStock = {};
+    const symbols = [];
+    pending.forEach(function(st){
+      const t = yahooTickersFor(st)[round];
+      if (!t) return;
+      symByStock[st.id] = t.toUpperCase();
+      symbols.push(t);
+    });
+    if (withFx && round===0) symbols.push(fxSymbol);
+    if (!symbols.length) break;
+    const quotes = await fetchYahooSparkQuotes(symbols);
+    if (withFx && round===0 && quotes[fxSymbol]) {
+      updated.fxOk = true;
+      usdRate = quotes[fxSymbol].price;
+      usdRateAt = new Date().toLocaleString('zh-TW', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    }
+    const writes = [];
+    pending.forEach(function(st){
+      const q = symByStock[st.id] && quotes[symByStock[st.id]];
+      if (!q) return;
+      updated.add(st.id);
+      const sym = symByStock[st.id];
+      const exchange = st.market==='台股' ? (/\.TWO$/.test(sym) ? 'otc' : 'tse') : '';
+      writes.push(storeFreshQuote(st, {price:q.price, prevClose:q.prevClose, at:q.at, source:'Yahoo', exchange:exchange}));
+    });
+    await Promise.all(writes);
+    // 第二輪只需要處理還沒抓到、而且有備選代碼（台股另一個市場）的
+    pending = pending.filter(function(st){ return !updated.has(st.id) && yahooTickersFor(st).length > round+1; });
+  }
+  return updated;
+}
+
+// 同時最多 limit 個請求，避免一次全部送出撞到 proxy 限制
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      try { results[idx] = await fn(items[idx]); } catch(e) { results[idx] = null; }
+    }
+  }
+  const workers = [];
+  for (let w=0; w<Math.min(limit, items.length); w++) workers.push(worker());
+  await Promise.all(workers);
+  return results;
+}
+
 async function fetchYahooPrice(st) {
-  const sid=st.id, code=st.code, market=st.market;
+  const sid=st.id;
   if (!priceFetchStatus[sid]) {
     priceFetchStatus[sid] = { fresh:false, source:'cache', usedCache:!!(priceCache[sid] && priceCache[sid].price) };
   }
-  let tickers = [];
-  if (market === '台股') tickers = [code+'.TW', code+'.TWO'];
-  else tickers = [code, code+'.US'];
+  const tickers = yahooTickersFor(st);
 
   for (const ticker of tickers) {
     try {
@@ -1142,7 +1279,8 @@ async function fetchYahooPrice(st) {
       if (price > 0) {
         const marketTime = Number(meta?.regularMarketTime);
         const at = marketTime > 0 ? new Date(marketTime*1000).toISOString() : new Date().toISOString();
-        await storeFreshQuote(st, {price:price, prevClose:prevClose, at:at, source:'Yahoo', exchange:''});
+        const exchange = st.market==='台股' ? (/\.TWO$/.test(ticker) ? 'otc' : 'tse') : '';
+        await storeFreshQuote(st, {price:price, prevClose:prevClose, at:at, source:'Yahoo', exchange:exchange});
         return price;
       }
     } catch(e) { continue; }
@@ -1215,10 +1353,18 @@ async function fetchAllPrices() {
   const quoteStocks = stocks.filter(st => st.market!=='基金');
   const twStocks = quoteStocks.filter(st => st.market==='台股');
   const usStocks = quoteStocks.filter(st => st.market==='美股');
-  const usdRatePromise = fetchUsdRate();
+  quoteStocks.forEach(function(st){
+    priceFetchStatus[st.id] = { fresh:false, source:'cache', usedCache:!!(priceCache[st.id] && priceCache[st.id].price) };
+  });
+  // 1) 台股：證交所 MIS 批次（1 個請求查 40 檔）
   const misUpdated = await fetchTwseMisPrices(twStocks);
-  const yahooFallbackStocks = twStocks.filter(function(st){ return !misUpdated.has(st.id); });
-  await Promise.all([usdRatePromise].concat(yahooFallbackStocks.concat(usStocks).map(fetchYahooPrice)));
+  // 2) MIS 沒抓到的台股 + 美股 + 匯率：Yahoo 批次（1 個請求查 20 檔）
+  const yahooStocks = twStocks.filter(function(st){ return !misUpdated.has(st.id); }).concat(usStocks);
+  const batchUpdated = await fetchYahooBatchPrices(yahooStocks, true);
+  if (!batchUpdated.fxOk) await fetchUsdRate(); // 批次沒帶回匯率才單獨查
+  // 3) 還是沒抓到的：逐檔查，但同時最多 2 個，避免撞到 proxy 每分鐘 20 次的限制
+  const leftovers = yahooStocks.filter(function(st){ return !batchUpdated.has(st.id); });
+  await mapLimit(leftovers, 2, fetchYahooPrice);
   saveLocalCache();
   const updated = quoteStocks.filter(st => priceFetchStatus[st.id] && priceFetchStatus[st.id].fresh).length;
   const failed = quoteStocks.filter(st => !priceFetchStatus[st.id] || !priceFetchStatus[st.id].fresh);
