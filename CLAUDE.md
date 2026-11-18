@@ -63,10 +63,7 @@
 - 支出追蹤 App（獨立專案，獨立 Firebase）
 
 ### 2026-11 健檢後尚未處理（依優先順序）
-1. **CSV 匯出→匯入會遺失資料**（備份機制，最優先）
-   - `doImport()` 只存 type/date/shares/price/total/note：fee/tax 被寫成 0，sellCost、sellLots 被丟掉
-   - `parseCSV()` 用 `split(',')`，但 `downloadCSV()` 會替含逗號欄位加引號（賣出批次 JSON 一定有逗號）→ 欄位錯位
-   - sellLots 的 buyTxId 匯入後是新 id，對不上
+1. ~~CSV 匯出→匯入會遺失資料~~（v56c3 已修：完整 CSV 解析、保留 fee/tax/sellCost/sellLots；匯出多「交易ID」欄供 buyTxId 對應；v56c3 以前的匯出檔沒有交易ID，批次指定無法還原，只保留賣出成本）
 2. **賣出成本三種算法不一致**（明細頁每筆賣出損益加總 ≠ 已實現損益）
    - `calc()`：sellLots 每批成本 = total÷shares（含手續費）
    - 批次選擇 `updateLotSummary()`／`confirmLots()`：用 l.price（不含手續費）算加權成本並寫入 sellCost

@@ -1,2 +1,24 @@
 __pycache__/
 *.pyc
+
+# ── 機密：絕不進 repo（repo 是公開的）──
+# Gmail OAuth / Firebase 服務帳戶（GitHub Actions 由 Secrets 還原）
+token.json
+credentials.json
+client_secret*.json
+firebase_service_account.json
+*service_account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+.env
+.env.*
+*.pem
+*.key
+
+# ── 個人財務資料 ──
+# 自動匯入下載的對帳單 PDF 與輸出的 CSV
+skis_pdfs/
+skis_csv/
+*.pdf
+# app 匯出的備份 CSV（檔名可能不同，統一排除）
+*.csv

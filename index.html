@@ -327,7 +327,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56c2</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56c3</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -3634,22 +3634,43 @@ function renderCharts() {
 }
 
 // ── Import ─────────────────────────────────────────────────
+// RFC 4180：支援引號欄位、"" 跳脫、引號內的逗號與換行（downloadCSV 的輸出格式）
+function splitCSVRecords(text) {
+  text = String(text||'').replace(/^\uFEFF/, '');
+  var records=[], row=[], field='', inQ=false;
+  for (var i=0;i<text.length;i++) {
+    var ch=text[i];
+    if (inQ) {
+      if (ch==='"') {
+        if (text[i+1]==='"') { field+='"'; i++; }
+        else inQ=false;
+      } else field+=ch;
+    } else if (ch==='"') inQ=true;
+    else if (ch===',') { row.push(field); field=''; }
+    else if (ch==='\r') { /* 交給 \n 處理 */ }
+    else if (ch==='\n') { row.push(field); records.push(row); row=[]; field=''; }
+    else field+=ch;
+  }
+  if (field!=='' || row.length) { row.push(field); records.push(row); }
+  return records.filter(function(r){ return r.some(function(c){ return c.trim()!==''; }); });
+}
+
 function parseCSV(text) {
-  var lines=text.trim().split('\n'), rows=[];
-  var header = lines[0] ? lines[0].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');}) : [];
+  var records=splitCSVRecords(text), rows=[];
+  var header = records[0] ? records[0].map(function(c){return c.trim();}) : [];
 
   // header-based lookup（相容新/舊/含幣別格式）
   function col(cols, name) {
     var idx = header.indexOf(name);
-    return (idx !== -1 && idx < cols.length) ? cols[idx].trim().replace(/^"|"$/g,'') : '';
+    return (idx !== -1 && idx < cols.length) ? cols[idx].trim() : '';
   }
   function colF(cols, name) { var v=col(cols,name); return v ? parseFloat(v) : null; }
 
   var isNewFmt = header.indexOf('賣出成本(每股)') !== -1 || header.length >= 11;
   var hasCurrencyCol = header.indexOf('幣別') !== -1;
 
-  for (var i=1;i<lines.length;i++) {
-    var cols=lines[i].split(',').map(function(c){return c.trim().replace(/^"|"$/g,'');});
+  for (var i=1;i<records.length;i++) {
+    var cols=records[i].map(function(c){return c.trim();});
     if (!cols[0]) continue;
 
     var row;
@@ -3673,6 +3694,8 @@ function parseCSV(text) {
       var slRaw = col(cols,'賣出批次(JSON)');
       if (slRaw) { try { var sl=JSON.parse(slRaw); if(Array.isArray(sl)&&sl.length) row.sellLots=sl; } catch(e){} }
       if (hasCurrencyCol) row.currency = col(cols,'幣別')||null;
+      var oid = col(cols,'交易ID');
+      if (oid) row.origId = oid;
     } else {
       // 舊格式（固定8欄，無 header）
       if (cols.length < 8) continue;
@@ -3742,8 +3765,13 @@ async function doImport() {
     if (!stockMap[r.code]) stockMap[r.code]={code:r.code,name:r.name,market:r.market,currency:r.currency||null,txns:[]};
     // 只要有任一筆帶幣別，就採用
     if (r.currency && !stockMap[r.code].currency) stockMap[r.code].currency = r.currency;
-    stockMap[r.code].txns.push({type:r.type,date:r.date,shares:r.shares,price:r.price,total:r.total,note:r.note,fee:0,tax:0});
+    var tx={type:r.type,date:r.date,shares:r.shares,price:r.price,fee:r.fee||0,tax:r.tax||0,total:r.total,note:r.note||''};
+    if (r.type==='賣出' && r.sellCost!=null) tx.sellCost=r.sellCost;
+    stockMap[r.code].txns.push({ data:tx, origId:r.origId||null, sellLots:(r.type==='賣出'&&r.sellLots)?r.sellLots:null });
   });
+
+  var idMap={};       // 匯出檔的交易ID → 新的 Firestore id（sellLots.buyTxId 要換成新 id）
+  var droppedLots=0;  // 對不上買入紀錄而略過批次指定的賣出筆數
 
   for (var code in stockMap) {
     var sg=stockMap[code];
@@ -3760,15 +3788,34 @@ async function doImport() {
       var currency = (sg.market==='基金' && sg.currency) ? sg.currency : null;
       sid=await addStockDb(sg.code,sg.name,sg.market,currency);
     }
+    // 先寫沒有批次指定的交易（含所有買入），取得新 id 後再寫帶 sellLots 的賣出
+    var later=[];
     for (var j=0;j<sg.txns.length;j++) {
-      await addTxDb(sid,sg.txns[j]);
+      var it=sg.txns[j];
+      if (it.sellLots) { later.push(it); continue; }
+      var nid=await addTxDb(sid,it.data);
+      if (it.origId) idMap[it.origId]=nid;
+    }
+    for (var k=0;k<later.length;k++) {
+      var it2=later[k];
+      var mapped=it2.sellLots.map(function(sl){
+        var nb=idMap[sl.buyTxId];
+        return nb ? { buyTxId:nb, shares:+sl.shares||0 } : null;
+      });
+      if (mapped.every(function(m){ return m; })) it2.data.sellLots=mapped;
+      else droppedLots++;  // 舊版匯出檔沒有交易ID，或買入不在檔案中 → 保留 sellCost，略過批次
+      var nid2=await addTxDb(sid,it2.data);
+      if (it2.origId) idMap[it2.origId]=nid2;
     }
   }
 
   await loadData();
   renderPortfolio();
   fetchAllPrices();
-  document.getElementById('import-preview').innerHTML='<div class="import-card"><div class="import-title" style="color:var(--green)">✅ 匯入完成！</div></div>';
+  document.getElementById('import-preview').innerHTML='<div class="import-card"><div class="import-title" style="color:var(--green)">✅ 匯入完成！</div>' +
+    (droppedLots ? '<div style="color:var(--text3);font-size:12px;margin-top:6px">⚠️ 有 '+droppedLots+' 筆賣出的「批次指定」對不上買入紀錄（可能是舊版匯出檔），已略過批次、改用該筆的賣出成本(每股)計算。</div>' : '') +
+    '</div>';
+  if (droppedLots) alert('有 '+droppedLots+' 筆賣出的「批次指定」對不上買入紀錄，已略過批次、保留賣出成本。');
   importRows=[];
   switchTab('portfolio');
 }
@@ -4172,7 +4219,7 @@ function downloadCSV(filename, rows) {
 }
 
 function exportTxCSV() {
-  var rows = [['日期','標的代號','標的名稱','市場','幣別','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)']];
+  var rows = [['日期','標的代號','標的名稱','市場','幣別','類型','股數','單價','手續費','交易稅','賣出成本(每股)','總金額','備註','賣出批次(JSON)','交易ID']];
   stocks.forEach(function(st){
     var list = (txns[st.id]||[]).slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
     var currency = st.market==='基金' ? (st.currency||'TWD') : (st.market==='美股' ? 'USD' : 'TWD');
@@ -4181,7 +4228,8 @@ function exportTxCSV() {
         tx.shares||'', tx.price||'', tx.fee||0, tx.tax||0,
         (tx.type==='賣出' && tx.sellCost!=null) ? tx.sellCost : '',
         tx.total, tx.note||'',
-        (tx.sellLots && tx.sellLots.length) ? JSON.stringify(tx.sellLots) : '']);
+        (tx.sellLots && tx.sellLots.length) ? JSON.stringify(tx.sellLots) : '',
+        tx.id||'']);
     });
   });
   var today = new Date().toISOString().slice(0,10);
