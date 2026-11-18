@@ -61,3 +61,23 @@
 - 淨值圖歷史股價改批次（避免撞 jina 每分鐘 20 次限制）
 - 基金自動匯入解析器
 - 支出追蹤 App（獨立專案，獨立 Firebase）
+
+### 2026-11 健檢後尚未處理（依優先順序）
+1. **CSV 匯出→匯入會遺失資料**（備份機制，最優先）
+   - `doImport()` 只存 type/date/shares/price/total/note：fee/tax 被寫成 0，sellCost、sellLots 被丟掉
+   - `parseCSV()` 用 `split(',')`，但 `downloadCSV()` 會替含逗號欄位加引號（賣出批次 JSON 一定有逗號）→ 欄位錯位
+   - sellLots 的 buyTxId 匯入後是新 id，對不上
+2. **賣出成本三種算法不一致**（明細頁每筆賣出損益加總 ≠ 已實現損益）
+   - `calc()`：sellLots 每批成本 = total÷shares（含手續費）
+   - 批次選擇 `updateLotSummary()`／`confirmLots()`：用 l.price（不含手續費）算加權成本並寫入 sellCost
+   - `renderDetail()` 的 avgAtSell：完全不看 sellLots，扣成本方式也和 calc 不同
+   - 修之前先請 YK 決定：賣出成本是否含手續費
+3. 組合頁上方合計沒套用「標的」篩選（卡片有套 portfolioSelectedIds，看板頁也有套）
+4. 小 bug：`[data-chartfilter]` 事件綁了兩次；「編輯標的」modal 在 `</script>` 之後，點外面關不掉；基金淨值輸入框 change＋blur 各寫一次 Firestore；名稱／備註直接塞 innerHTML 未跳脫
+5. 清理：`test.html`、`test2.html`（YK 已確認不再使用）、`_renderWatchlistOLD()`、沒有入口的 `'return'` 圖表分支、icon.png 1.3MB 偏大
+6. 自動匯入：定期定額以「預繳金」當總金額是否正確，待 YK 用實際 PDF 確認
+
+### 需要 YK 自己到後台確認
+- Firestore 安全規則是否限制 `request.auth.uid == uid`
+- Gmail OAuth 同意畫面若為「Testing」，token 每 7 天過期 → 改為「In production」
+- v56c2 上線後的報價成功率；若仍常被限流，改做「GitHub Actions 定時寫入報價」
