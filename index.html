@@ -327,7 +327,7 @@ textarea.input{height:72px;resize:none}
             <button class="mf-btn" data-market="基金">📦 基金</button>
           </div>
         </div>
-        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56c1</div>
+        <div class="header-sub" id="header-sub"></div><div style="font-size:10px;color:var(--text3);margin-top:1px;opacity:0.6">v56c2</div>
       </div>
       <button class="btn-icon" id="header-action-btn">＋</button>
     </div>
@@ -1005,6 +1005,7 @@ async function fetchTextWithFallback(targetUrl) {
       const res = await fetch(src.url, { signal: ctrl.signal, cache: 'no-store' });
       if (!res.ok) {
         if (res.status === 429 || (src.tripOn5xx && res.status >= 500)) proxyDownUntil[src.name] = Date.now() + 60000;
+        if (res.status === 429) proxyRateLimited = true;
         continue;
       }
       const text = await res.text();
@@ -1019,6 +1020,7 @@ async function fetchTextWithFallback(targetUrl) {
 }
 // 斷路器：proxy 被限流（429）、自己掛掉或逾時後，60 秒內不再嘗試，避免每個請求都白等 12 秒
 var proxyDownUntil = {};
+var proxyRateLimited = false; // 本輪是否遇到限流（用來顯示原因、決定要不要自動重試）
 
 async function fetchJsonDocument(targetUrl) {
   const text = await fetchTextWithFallback(targetUrl);
@@ -1347,41 +1349,82 @@ function nextDividendFor(code) {
   return null;
 }
 
-async function fetchAllPrices() {
-  document.getElementById('header-sub').textContent = '更新價格中…';
-  priceFetchStatus = {};
-  const quoteStocks = stocks.filter(st => st.market!=='基金');
-  const twStocks = quoteStocks.filter(st => st.market==='台股');
-  const usStocks = quoteStocks.filter(st => st.market==='美股');
-  quoteStocks.forEach(function(st){
+// 只有「持有中」的股票需要現價；已出清的保留舊報價即可，不必消耗 proxy 額度
+function needsLiveQuote(st) {
+  if (st.market==='基金') return false;
+  return calc(st.id, 0).cur > 1e-6;
+}
+
+// 抓一批股票的報價：台股先走 MIS，其餘（含 MIS 漏掉的台股）走 Yahoo 批次，最後逐檔補查
+async function fetchQuotesFor(list, withFx) {
+  const twStocks = list.filter(st => st.market==='台股');
+  const usStocks = list.filter(st => st.market==='美股');
+  list.forEach(function(st){
     priceFetchStatus[st.id] = { fresh:false, source:'cache', usedCache:!!(priceCache[st.id] && priceCache[st.id].price) };
   });
   // 1) 台股：證交所 MIS 批次（1 個請求查 40 檔）
-  const misUpdated = await fetchTwseMisPrices(twStocks);
+  const misUpdated = twStocks.length ? await fetchTwseMisPrices(twStocks) : new Set();
   // 2) MIS 沒抓到的台股 + 美股 + 匯率：Yahoo 批次（1 個請求查 20 檔）
   const yahooStocks = twStocks.filter(function(st){ return !misUpdated.has(st.id); }).concat(usStocks);
-  const batchUpdated = await fetchYahooBatchPrices(yahooStocks, true);
-  if (!batchUpdated.fxOk) await fetchUsdRate(); // 批次沒帶回匯率才單獨查
+  const batchUpdated = (yahooStocks.length || withFx) ? await fetchYahooBatchPrices(yahooStocks, withFx) : new Set();
+  if (withFx && !batchUpdated.fxOk) await fetchUsdRate(); // 批次沒帶回匯率才單獨查
   // 3) 還是沒抓到的：逐檔查，但同時最多 2 個，避免撞到 proxy 每分鐘 20 次的限制
   const leftovers = yahooStocks.filter(function(st){ return !batchUpdated.has(st.id); });
   await mapLimit(leftovers, 2, fetchYahooPrice);
-  saveLocalCache();
-  const updated = quoteStocks.filter(st => priceFetchStatus[st.id] && priceFetchStatus[st.id].fresh).length;
-  const failed = quoteStocks.filter(st => !priceFetchStatus[st.id] || !priceFetchStatus[st.id].fresh);
+}
+
+function isQuoteFresh(st) { return !!(priceFetchStatus[st.id] && priceFetchStatus[st.id].fresh); }
+
+function showQuoteStatus(quoteStocks, retryScheduled) {
+  const el = document.getElementById('header-sub');
+  const updated = quoteStocks.filter(isQuoteFresh).length;
+  const failed = quoteStocks.filter(st => !isQuoteFresh(st));
   const cached = failed.filter(st => priceFetchStatus[st.id] && priceFetchStatus[st.id].usedCache);
   const unavailable = failed.length - cached.length;
   const now = new Date().toLocaleTimeString('zh-TW');
-  if (!quoteStocks.length) {
-    document.getElementById('header-sub').textContent = '沒有需要自動更新的股票';
-  } else if (!failed.length) {
-    document.getElementById('header-sub').textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + now;
-  } else {
-    const fallbackParts = [];
-    if (cached.length) fallbackParts.push(cached.length + ' 檔沿用舊報價');
-    if (unavailable) fallbackParts.push(unavailable + ' 檔無可用報價');
-    document.getElementById('header-sub').textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + fallbackParts.join(' ・ ');
-  }
+  if (!quoteStocks.length) { el.textContent = '沒有需要自動更新的股票'; return; }
+  if (!failed.length) { el.textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + now; return; }
+  const parts = [];
+  if (cached.length) parts.push(cached.length + ' 檔沿用舊報價');
+  if (unavailable) parts.push(unavailable + ' 檔無可用報價');
+  if (proxyRateLimited) parts.push(retryScheduled ? 'proxy 限流，約 1 分鐘後自動重試' : 'proxy 限流');
+  el.textContent = '價格已更新 ' + updated + '/' + quoteStocks.length + ' ・ ' + parts.join(' ・ ');
+}
+
+function rerenderAfterQuotes() {
   renderPortfolio();
+  const active = document.querySelector('.tab-btn.active');
+  if (active && active.dataset.tab === 'watchlist') renderWatchlistTable();
+}
+
+var priceRetryTimer = null;
+async function fetchAllPrices() {
+  document.getElementById('header-sub').textContent = '更新價格中…';
+  if (priceRetryTimer) { clearTimeout(priceRetryTimer); priceRetryTimer = null; }
+  priceFetchStatus = {};
+  proxyRateLimited = false;
+  const quoteStocks = stocks.filter(needsLiveQuote);
+  await fetchQuotesFor(quoteStocks, true);
+  saveLocalCache();
+  // 被限流：等 proxy 的 1 分鐘視窗過去，自動只重抓失敗的那幾檔（只重試一次）
+  const failed = quoteStocks.filter(st => !isQuoteFresh(st));
+  const willRetry = failed.length > 0 && proxyRateLimited;
+  showQuoteStatus(quoteStocks, willRetry);
+  rerenderAfterQuotes();
+  if (willRetry) {
+    priceRetryTimer = setTimeout(async function(){
+      priceRetryTimer = null;
+      proxyDownUntil = {};
+      proxyRateLimited = false;
+      // 期間資料可能已重新同步（stocks 換成新物件），所以用 id 對應
+      const failedIds = new Set(failed.map(st => st.id));
+      const retryList = stocks.filter(st => failedIds.has(st.id) && needsLiveQuote(st));
+      await fetchQuotesFor(retryList, !usdRate);
+      saveLocalCache();
+      showQuoteStatus(stocks.filter(needsLiveQuote), false);
+      rerenderAfterQuotes();
+    }, 65000);
+  }
 }
 
 // ── 歷史淨值：每日歷史股價/匯率抓取（period1~period2） ──────
